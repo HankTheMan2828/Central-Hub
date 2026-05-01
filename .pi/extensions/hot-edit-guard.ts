@@ -29,6 +29,8 @@ const CRITICAL_FILES = new Set([
 
 const CRITICAL_DIRS = [
   ".pi" + path.sep + "extensions",
+  // Cover frontend/main/*.js — extracted from the original main.js refactor.
+  path.sep + "main" + path.sep,
 ];
 
 /* ------------------------------------------------------------------ */

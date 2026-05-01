@@ -4,6 +4,8 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+@AI_EDITING_GUIDE.md
+
 # PI SDK Integration (CRITICAL)
 
 This is an Electron + Next.js desktop app that embeds the PI coding agent via the PI SDK.
@@ -30,7 +32,7 @@ models, or the main process.** It documents every object, every event, every pat
 
 ## Hot-Edit Safety System
 
-When editing critical files (`main.js`, `package.json`, or `.pi/extensions/*`),
+When editing critical files (`main.js`, `main/*.js`, `package.json`, or `.pi/extensions/*`),
 the `hot-edit-guard` extension automatically creates git safety checkpoints on
 the `ai-safety-rollbacks` branch and orchestrates guarded restarts. The external
 `scripts/watchdog.js` process handles crash detection and auto-rollback.
