@@ -18,7 +18,10 @@
 /out/
 
 # production
-/build
+/build/*
+!/build/icon.ico
+!/build/icon.png
+!/build/icon.svg
 /release
 
 # misc

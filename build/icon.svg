@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Central Hub app icon">
+  <defs>
+    <linearGradient id="tile" x1="128" y1="96" x2="900" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#101826"/>
+      <stop offset="1" stop-color="#070a10"/>
+    </linearGradient>
+    <filter id="shadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#tile)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="208" y="246" width="326" height="326" rx="86" fill="#56dfcf" transform="rotate(-10 371 409)"/>
+    <circle cx="680" cy="344" r="150" fill="#ff6b5f"/>
+    <path d="M604 560 800 786 474 812z" fill="#ffbe5c"/>
+    <rect x="286" y="642" width="252" height="128" rx="64" fill="#f7f9fc" transform="rotate(-25 412 706)"/>
+    <circle cx="350" cy="676" r="54" fill="#9d83f5"/>
+  </g>
+</svg>
