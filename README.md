@@ -40,7 +40,7 @@ npm run app:dev
 
 ## Planned Modules
 1. **Agent Chat:** Direct multi-turn interface for local/remote LLMs.
-2. **Word Processor:** Rich-text editor with AI inline assist.
+2. **Docs Area:** Rich-text editor with AI inline assist.
 3. **Typing Practice:** Embedded WPM tracking and keyboard training.
 4. **AI Search:** Headless browsing and summarization agent.
 5. **Dev & Workflows:** Autonomous coding assistant interface.

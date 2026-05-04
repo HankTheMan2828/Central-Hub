@@ -123,7 +123,7 @@ const { session } = await createAgentSession({
   cwd,                                              // required — tools resolve paths against this
   sessionManager: SessionManager.inMemory(cwd),      // no disk persistence
   settingsManager: SettingsManager.inMemory({        // no file I/O
-    compaction: { enabled: false }
+    compaction: { enabled: true }
   }),
   authStorage,
   modelRegistry,
@@ -303,10 +303,10 @@ breaking changes. The SDK surface (`createAgentSession`, `AuthStorage`,
 
 ## FAQ
 
-### Why do I see a cmd.exe / System32 process when the app runs?
+### Why does PI start a cmd.exe / System32 process?
 
-This is normal. PI's `bash` tool needs a shell to execute commands the LLM
-asks for. On Windows that's `cmd.exe` from `C:\Windows\System32`. It only
-spawns when the LLM actually calls the bash tool — you won't see it at
-startup before sending a message. If you see it persist, it means the LLM
-is still running a command.
+PI's `bash` tool needs a shell to execute commands the LLM asks for. On
+Windows that's `cmd.exe` from `C:\Windows\System32`. CentralHub patches
+child-process creation in the Electron main process so those shell windows are
+hidden, keeping the app visually self contained. If a shell process persists in
+Task Manager, it means the LLM is still running a command.

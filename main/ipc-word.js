@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  WordTab AI session.                                               */
+/*  Docs Area AI session.                                             */
 /*                                                                    */
 /*  Owns the live Markdown document cache, the read-mode gate, and    */
 /*  the two custom tools (word_read, word_edit) that let the AI side  */
@@ -36,12 +36,12 @@ async function getWordReadTool() {
   const { Type } = await loadTypebox();
   wordReadToolDef = {
     name: 'word_read',
-    label: 'Read Word document',
+    label: 'Read Docs Area document',
     description:
-      "Returns the current contents of the Word document the user is editing in CentralHub, as Markdown. The document is shared live with the user's editor — call this tool to see what they're working on.",
-    promptSnippet: 'word_read — fetch the current Word document as Markdown.',
+      "Returns the current contents of the Docs Area document the user is editing in CentralHub, as Markdown. The document is shared live with the user's editor — call this tool to see what they're working on.",
+    promptSnippet: 'word_read — fetch the current Docs Area document as Markdown.',
     promptGuidelines: [
-      'Call word_read once at the start of the conversation to see the current Word document.',
+      'Call word_read once at the start of the conversation to see the current Docs Area document.',
       'If the user mentions edits, or you suspect the document has changed since you last read it, call word_read again before responding.',
       'When in doubt about the current document state, re-read.',
     ],
@@ -49,7 +49,7 @@ async function getWordReadTool() {
     async execute() {
       const text = wordDocCache && wordDocCache.trim()
         ? wordDocCache
-        : '(The Word document is currently empty.)';
+        : '(The Docs Area document is currently empty.)';
       return {
         content: [{ type: 'text', text }],
         details: {},
@@ -77,13 +77,14 @@ async function getWordEditTool() {
   const { Type } = await loadTypebox();
   wordEditToolDef = {
     name: 'word_edit',
-    label: 'Edit Word document',
+    label: 'Edit Docs Area document',
     description:
-      "Replaces a single occurrence of `old_string` with `new_string` in the user's Word document. `old_string` must appear EXACTLY ONCE in the current document — if it appears zero or multiple times, the call fails and you must add more surrounding context to disambiguate. Prefer many small targeted edits over one large rewrite. The document is shared live with the user's editor.",
+      "Replaces a single occurrence of `old_string` with `new_string` in the user's Docs Area document. `old_string` must appear EXACTLY ONCE in the current document — if it appears zero or multiple times, the call fails and you must add more surrounding context to disambiguate. Prefer many small targeted edits over one large rewrite. The document is shared live with the user's editor.",
     promptSnippet:
-      'word_edit — replace one exact occurrence of old_string with new_string in the Word document.',
+      'word_edit — replace one exact occurrence of old_string with new_string in the Docs Area document.',
     promptGuidelines: [
       'To change the document, call word_edit instead of restating the document or asking the user to apply changes.',
+      'If the document is empty, call word_edit with old_string as an empty string and new_string as the complete starting content.',
       'old_string must match the document EXACTLY (whitespace, punctuation, casing) and must be unique. Include enough surrounding context to make it unique.',
       'Make multiple small word_edit calls rather than one giant replacement. If a section has many changes near each other, group them into one edit with enough context.',
       'Your chat replies are shown to the user as conversation. Do NOT paste the document or revised passages into chat — the editor is updated automatically when word_edit succeeds.',
@@ -93,7 +94,7 @@ async function getWordEditTool() {
       {
         old_string: Type.String({
           description:
-            'Exact text to replace. Must appear exactly once in the current document.',
+            'Exact text to replace. Must appear exactly once. Use an empty string only when the current document is empty.',
         }),
         new_string: Type.String({
           description: 'Replacement text. May be empty to delete `old_string`.',
@@ -110,7 +111,28 @@ async function getWordEditTool() {
       const oldStr = typeof params?.old_string === 'string' ? params.old_string : '';
       const newStr = typeof params?.new_string === 'string' ? params.new_string : '';
       if (!oldStr) {
-        throw new Error('word_edit: old_string must be a non-empty string.');
+        if (wordDocCache.trim()) {
+          throw new Error(
+            'word_edit: old_string may be empty only when the current document is empty. Call word_read and retry with an exact existing string.'
+          );
+        }
+        wordDocCache = newStr;
+
+        if (getMainWindow() && !getMainWindow().isDestroyed()) {
+          try {
+            getMainWindow().webContents.send('pi:word-doc-edit', { newContent: wordDocCache });
+          } catch (_) { /* non-fatal */ }
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Initial content inserted. Document is now ${wordDocCache.length} characters.`,
+            },
+          ],
+          details: { length: wordDocCache.length },
+        };
       }
       const matches = countOccurrences(wordDocCache, oldStr);
       if (matches === 0) {
@@ -150,7 +172,7 @@ async function getWordEditTool() {
 
 function register(ipcMain) {
   /**
-   * Create a WordTab-flavoured session: built-in fs/bash tools disabled,
+   * Create a Docs Area-flavoured session: built-in fs/bash tools disabled,
    * `word_read` registered so the AI can fetch the live document.
    */
   ipcMain.handle('pi:word-session-create', async () => {

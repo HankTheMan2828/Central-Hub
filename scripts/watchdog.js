@@ -87,6 +87,7 @@ function relaunchElectron(launchArgv, cwd) {
     detached: true,
     stdio: "ignore",
     shell: process.platform === "win32", // needed on Windows for .cmd/.bat
+    windowsHide: process.platform === "win32",
   }).unref();
 }
 

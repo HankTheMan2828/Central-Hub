@@ -1,0 +1,51 @@
+/*
+ * CentralHub Theme - Harbor Dusk
+ * Cool harbor air, inky teal panels, coral beacons, and neon sea-glass links.
+ */
+
+[data-theme="harbor-dusk"] {
+  /* Backgrounds */
+  --ch-bg-page:        #061014;
+  --ch-bg-base:        #0B1A20;
+  --ch-bg-surface:     #102832;
+  --ch-bg-elevated:    #183944;
+  --ch-bg-inset:       #050B0D;
+  --ch-bg-hover:       #143440;
+
+  /* Borders */
+  --ch-border:         #247786;
+  --ch-border-subtle:  #245665;
+  --ch-border-faint:   #183844;
+
+  /* Text */
+  --ch-text:           #ECFBFF;
+  --ch-text-muted:     #A6D0D8;
+  --ch-text-faint:     #67A0AC;
+
+  /* Accent */
+  --ch-accent:         #FF6F61;
+  --ch-accent-10:      rgba(255, 111, 97, 0.16);
+  --ch-accent-5:       rgba(255, 111, 97, 0.08);
+
+  /* State */
+  --ch-success:        #55F0B0;
+  --ch-error:          #FF4E75;
+  --ch-error-bg:       #221013;
+  --ch-error-border:   #613039;
+  --ch-error-text:     #D99AA3;
+  --ch-warning:        #FFD052;
+
+  /* Code */
+  --ch-code-bg:        #102B35;
+  --ch-code-text:      #FFA892;
+
+  /* Links */
+  --ch-link:           #30F0E6;
+  --ch-link-hover:     #8DFFF8;
+
+  /* Misc */
+  --ch-gold:           #FFE066;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: radial-gradient(circle at 14% 0%, rgba(48, 240, 230, 0.16) 0%, transparent 32%), radial-gradient(circle at 76% 0%, rgba(255, 111, 97, 0.16) 0%, transparent 30%);
+  --ch-pane-bg:        rgba(11, 26, 32, 0.88);
+}

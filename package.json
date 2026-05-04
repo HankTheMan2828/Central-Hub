@@ -1,19 +1,32 @@
 {
-  "name": "frontend",
+  "name": "centralhub",
   "version": "0.1.0",
   "private": true,
+  "description": "Central Hub desktop app",
+  "author": "Central Hub",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HankTheMan2828/centralhub.git"
+  },
   "main": "main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "icons": "node scripts/generate-app-icons.js",
     "electron": "wait-on tcp:3000 && cross-env NODE_ENV=development electron .",
-    "app:dev": "concurrently -k \"npm run dev\" \"npm run electron\""
+    "app:dev": "concurrently -k \"npm run dev\" \"npm run electron\"",
+    "app:pack": "npm run build && electron-builder --config electron-builder.config.cjs --dir",
+    "dist": "npm run build && electron-builder --config electron-builder.config.cjs",
+    "dist:win": "npm run build && electron-builder --config electron-builder.config.cjs --win nsis",
+    "dist:win:publish": "npm run build && electron-builder --config electron-builder.config.cjs --win nsis --publish always"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.70.6",
+    "@xenova/transformers": "^2.17.2",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.12.0",
     "next": "16.2.4",
@@ -29,6 +42,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",

@@ -1,46 +1,73 @@
 @import "tailwindcss";
 
+/* ── Theme files ──────────────────────────────────────────────────────
+   Each file defines all --ch-* tokens under [data-theme="<id>"].
+   To add a new theme: create the file, import it here, register the
+   id in ThemeProvider.tsx. Nothing else needs to change.              */
+@import "../themes/midnight.css";
+@import "../themes/daylight-dark.css";
+@import "../themes/shadow-fog.css";
+@import "../themes/sunlit-canvas.css";
+@import "../themes/aurora-ember.css";
+@import "../themes/copper-violet.css";
+@import "../themes/harbor-dusk.css";
+
+/* ── Tailwind design tokens ───────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Segoe UI", Arial, Helvetica, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #000000;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --foreground: #ffffff;
-  }
-}
-
+/* ── Base styles ──────────────────────────────────────────────────── */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--ch-bg-page);
+  background-image: var(--ch-bg-page-gradient, none);
+  color: var(--ch-text);
   font-family: Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
 }
 
-/* Custom Scrollbar to maintain hard edges */
+/* Wallpaper support — applied when --ch-wallpaper is not `none` */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: var(--ch-wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Custom scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent; 
+  background: transparent;
   border-left: 1px solid rgba(128, 128, 128, 0.2);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--foreground); 
+  background: var(--ch-border);
 }
 
+/* ── Electron window drag regions ─────────────────────────────────── */
 .drag-region {
   -webkit-app-region: drag;
 }
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* ── Wallpaper pane helper ────────────────────────────────────────── */
+/* Panels that should become semi-transparent when a wallpaper is set
+   get the .pane class. When --ch-wallpaper is `none` they fall back to
+   their solid --ch-bg-* colour via --ch-pane-bg.                      */
+.ch-pane {
+  background-color: var(--ch-pane-bg, var(--ch-bg-base));
+  backdrop-filter: blur(0px);
+  transition: background-color 0.2s ease;
 }

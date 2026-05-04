@@ -1,0 +1,51 @@
+/*
+ * CentralHub Theme - Copper Violet
+ * Polished blackened violet, copper highlights, and electric signal links.
+ */
+
+[data-theme="copper-violet"] {
+  /* Backgrounds */
+  --ch-bg-page:        #10071A;
+  --ch-bg-base:        #1A0F2A;
+  --ch-bg-surface:     #25163D;
+  --ch-bg-elevated:    #352158;
+  --ch-bg-inset:       #090512;
+  --ch-bg-hover:       #301C50;
+
+  /* Borders */
+  --ch-border:         #9B6B86;
+  --ch-border-subtle:  #6B456F;
+  --ch-border-faint:   #442A56;
+
+  /* Text */
+  --ch-text:           #F7F0FF;
+  --ch-text-muted:     #CBB4EA;
+  --ch-text-faint:     #8D72B7;
+
+  /* Accent */
+  --ch-accent:         #E09A5F;
+  --ch-accent-10:      rgba(224, 154, 95, 0.18);
+  --ch-accent-5:       rgba(224, 154, 95, 0.09);
+
+  /* State */
+  --ch-success:        #65F5A1;
+  --ch-error:          #FF4F7B;
+  --ch-error-bg:       #241015;
+  --ch-error-border:   #65303A;
+  --ch-error-text:     #D9A0A7;
+  --ch-warning:        #FFB45F;
+
+  /* Code */
+  --ch-code-bg:        #24143A;
+  --ch-code-text:      #FFB06A;
+
+  /* Links */
+  --ch-link:           #74D0FF;
+  --ch-link-hover:     #B0E6FF;
+
+  /* Misc */
+  --ch-gold:           #F5B85F;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: radial-gradient(circle at 16% 0%, rgba(224, 154, 95, 0.16) 0%, transparent 30%), radial-gradient(circle at 82% 8%, rgba(145, 87, 220, 0.18) 0%, transparent 30%), linear-gradient(145deg, rgba(255, 154, 61, 0.1) 0%, transparent 34%);
+  --ch-pane-bg:        rgba(26, 15, 42, 0.88);
+}

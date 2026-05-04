@@ -1,0 +1,63 @@
+/*
+ * CentralHub Theme — Daylight Dark
+ * =================================
+ * A dark theme engineered for bright environments — offices, outdoors,
+ * or anywhere with ambient light hitting the screen.
+ *
+ * Key differences from Midnight:
+ *   • Backgrounds are lighter grays (#1e1e1e–#2e2e2e) instead of near-
+ *     black, so the screen appears brighter and competes with glare.
+ *   • Borders are more visible (#484848) for clearer panel separation.
+ *   • Text is a brighter white (#f0f0f0) for a higher contrast ratio.
+ *   • Accent is slightly more saturated (#FFAA33) for better visibility.
+ *   • Success and error colours are slightly brighter and more punchy.
+ */
+
+[data-theme="daylight-dark"] {
+
+  /* Backgrounds */
+  --ch-bg-page:        #1a1a1a;
+  --ch-bg-base:        #212121;
+  --ch-bg-surface:     #292929;
+  --ch-bg-elevated:    #333333;
+  --ch-bg-inset:       #1c1c1c;
+  --ch-bg-hover:       #2c2c2c;
+
+  /* Borders — noticeably more visible than Midnight */
+  --ch-border:         #484848;
+  --ch-border-subtle:  #363636;
+  --ch-border-faint:   #2a2a2a;
+
+  /* Text */
+  --ch-text:           #f0f0f0;
+  --ch-text-muted:     #aaaaaa;
+  --ch-text-faint:     #757575;
+
+  /* Accent — slightly more saturated for high-ambient-light legibility */
+  --ch-accent:         #FFAA33;
+  --ch-accent-10:      rgba(255, 170, 51, 0.12);
+  --ch-accent-5:       rgba(255, 170, 51, 0.06);
+
+  /* State */
+  --ch-success:        #5cb85c;
+  --ch-error:          #ff6b6b;
+  --ch-error-bg:       #2a1a1a;
+  --ch-error-border:   #5a3333;
+  --ch-error-text:     #d49999;
+  --ch-warning:        #FFB347;
+
+  /* Code */
+  --ch-code-bg:        #2a2a2a;
+  --ch-code-text:      #e8b060;
+
+  /* Links */
+  --ch-link:           #66b3ff;
+  --ch-link-hover:     #88ccff;
+
+  /* Misc */
+  --ch-gold:           #FFD700;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: none;
+  --ch-pane-bg:        rgba(33, 33, 33, 0.88);
+
+}

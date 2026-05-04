@@ -27,10 +27,50 @@ const MODEL_CACHE_MS = 30_000; // re-fetch at most every 30 s
 const appCwd = path.resolve(__dirname, '..', '..');
 
 /* ------------------------------------------------------------------ */
+/*  Windows console containment                                       */
+/* ------------------------------------------------------------------ */
+function hideChildProcessWindowsOnWin32() {
+  if (process.platform !== 'win32') return;
+
+  const childProcess = require('child_process');
+  if (childProcess.__centralHubWindowsHidden) return;
+
+  const withHiddenWindow = (options) => {
+    if (options === undefined || options === null) {
+      return { windowsHide: true };
+    }
+    if (typeof options === 'object' && !Array.isArray(options)) {
+      return { ...options, windowsHide: options.windowsHide ?? true };
+    }
+    return options;
+  };
+
+  const originalSpawn = childProcess.spawn;
+  childProcess.spawn = function spawnHidden(command, args, options) {
+    if (Array.isArray(args)) {
+      return originalSpawn.call(this, command, args, withHiddenWindow(options));
+    }
+    return originalSpawn.call(this, command, withHiddenWindow(args));
+  };
+
+  const originalSpawnSync = childProcess.spawnSync;
+  childProcess.spawnSync = function spawnSyncHidden(command, args, options) {
+    if (Array.isArray(args)) {
+      return originalSpawnSync.call(this, command, args, withHiddenWindow(options));
+    }
+    return originalSpawnSync.call(this, command, withHiddenWindow(args));
+  };
+
+  Object.defineProperty(childProcess, '__centralHubWindowsHidden', { value: true });
+  require('module').syncBuiltinESMExports();
+}
+
+/* ------------------------------------------------------------------ */
 /*  Load PI SDK once                                                  */
 /* ------------------------------------------------------------------ */
 async function loadPiSdk() {
   if (!piSdk) {
+    hideChildProcessWindowsOnWin32();
     piSdk = await import('@mariozechner/pi-coding-agent');
     console.log('[PI] SDK loaded');
   }
@@ -78,6 +118,17 @@ async function snapshot(session) {
 
   const providers = {};
   for (const m of models) providers[m.provider] = true;
+  const authStorage = getAuthStorage();
+  if (authStorage) {
+    for (const provider of ['openrouter', 'brave']) {
+      try {
+        if (authStorage.hasAuth(provider)) providers[provider] = true;
+      } catch (_) {}
+    }
+    try {
+      for (const provider of authStorage.list?.() ?? []) providers[provider] = true;
+    } catch (_) {}
+  }
 
   const cm = session?.model;
   const currentModel = cm

@@ -1,19 +1,28 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef, useTransition } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
+export interface AttachedFile {
+  type: "text" | "image";
+  title: string;
+  content: string;
+  mimeType?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "tool";
   content: string;
+  thinking?: string;
   toolName?: string;
   toolResult?: string;
   isToolError?: boolean;
   timestamp: number;
   isStreaming?: boolean;
+  attachments?: AttachedFile[];
 }
 
 export interface PiModel {
@@ -29,6 +38,11 @@ export interface CurrentModel {
   id: string;
   name: string;
   provider: string;
+}
+
+export interface SlashCommand {
+  name: string;
+  description: string;
 }
 
 export interface SessionStatsData {
@@ -48,6 +62,21 @@ export interface ContextUsageData {
   percent: number | null;
 }
 
+export interface AttachedImage {
+  id: string;
+  name: string;
+  mimeType: string;
+  data: string;
+  preview: string;
+}
+
+export interface AttachedDocument {
+  id: string;
+  name: string;
+  path: string;
+  textContent?: string;
+}
+
 /* ------------------------------------------------------------------ */
 /*  IPC helper                                                        */
 /* ------------------------------------------------------------------ */
@@ -56,33 +85,16 @@ function getIpc() {
   try {
     const electron = (0, eval)("require")("electron");
     return {
-      invoke: (channel: string, ...args: any[]) => electron.ipcRenderer.invoke(channel, ...args),
-      on: (channel: string, fn: (...args: any[]) => void) => electron.ipcRenderer.on(channel, fn),
-      removeAllListeners: (channel: string) => electron.ipcRenderer.removeAllListeners(channel),
+      invoke: (channel: string, ...args: any[]) =>
+        electron.ipcRenderer.invoke(channel, ...args),
+      on: (channel: string, fn: (...args: any[]) => void) =>
+        electron.ipcRenderer.on(channel, fn),
+      removeListener: (channel: string, fn: (...args: any[]) => void) =>
+        electron.ipcRenderer.removeListener(channel, fn),
     };
   } catch {
     return null;
   }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Apply a snapshot returned by pi:init / pi:set-api-key / etc.      */
-/* ------------------------------------------------------------------ */
-interface Snapshot {
-  models: PiModel[];
-  currentModel: CurrentModel | null;
-  providers: Record<string, boolean>;
-}
-
-function applySnapshot(
-  snap: Snapshot,
-  setModels: (v: PiModel[]) => void,
-  setCurrentModel: (v: CurrentModel | null) => void,
-  setAuthProviders: (v: Record<string, boolean>) => void,
-) {
-  setModels(snap.models ?? []);
-  setCurrentModel(snap.currentModel ?? null);
-  setAuthProviders(snap.providers ?? {});
 }
 
 /* ------------------------------------------------------------------ */
@@ -118,58 +130,178 @@ function savePrefs(favorites: string[], blocked: string[]) {
 /* ------------------------------------------------------------------ */
 /*  Hook                                                              */
 /* ------------------------------------------------------------------ */
-export function usePiChat() {
+export type UsePiChatOptions = {
+  existingSessionId?: string;
+  /**
+   * "chat" (default) creates a normal coding-agent session via
+   * `pi:session-create`. "word" creates a WordTab session via
+   * `pi:word-session-create`, which registers the `word_read` tool and
+   * disables built-in fs/bash tools.
+   */
+  sessionType?: "chat" | "word";
+};
+
+type PiSnapshotResult = {
+  success?: boolean;
+  error?: string;
+  sessionId?: string;
+  models?: PiModel[];
+  currentModel?: CurrentModel | null;
+  providers?: Record<string, boolean>;
+};
+
+type AuthChangedPayload = Pick<
+  PiSnapshotResult,
+  "models" | "currentModel" | "providers"
+> & {
+  provider?: string;
+};
+
+export function usePiChat(options?: UsePiChatOptions) {
+  const existingSessionId = options?.existingSessionId;
+  const sessionType: "chat" | "word" = options?.sessionType ?? "chat";
+
+  /* ---- session identity ---- */
+  const [sessionId, setSessionId] = useState<string | null>(
+    existingSessionId ?? null
+  );
+  // Ref avoids stale closures inside the event handler
+  const sessionIdRef = useRef<string | null>(existingSessionId ?? null);
+  // Tracks the session this hook currently *owns* (i.e. created and is
+  // responsible for destroying). Separate from sessionIdRef because it
+  // stays null when a session was borrowed via existingSessionId, and
+  // it's updated by both the lifecycle init AND restart().
+  const activeSessionRef = useRef<string | null>(null);
+
+  /* ---- chat state ---- */
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+
+  /* ---- transition for low-priority streaming updates ---- */
+  const [isPending, startTransition] = useTransition();
+
+  /* ---- delta throttle ---- */
+  const deltaBufferRef = useRef<{ type: "text" | "thinking"; delta: string } | null>(null);
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const THROTTLE_MS = 32; // ~30 fps
+
+  /* ---- models ---- */
   const [models, setModels] = useState<PiModel[]>([]);
   const [currentModel, setCurrentModel] = useState<CurrentModel | null>(null);
   const [authProviders, setAuthProviders] = useState<Record<string, boolean>>({});
+  const [commands, setCommands] = useState<SlashCommand[]>([]);
 
-  /* ---- model prefs ---- */
+  /* ---- prefs ---- */
   const [favorites, setFavorites] = useState<string[]>([]);
   const [blocked, setBlocked] = useState<string[]>([]);
 
-  /* ---- session stats (cost + context) ---- */
+  /* ---- session stats ---- */
   const [sessionStats, setSessionStats] = useState<SessionStatsData | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageData | null>(null);
 
-  /* ---- model key helper ---- */
-  const modelKey = (m: { provider: string; id: string }) => `${m.provider}:${m.id}`;
+  /* ---- attachments ---- */
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+  const [attachedDocuments, setAttachedDocuments] = useState<AttachedDocument[]>([]);
 
-  /* ---- initialise — single IPC call, no pre-fetching ---- */
-  const init = useCallback(async () => {
-    const ipc = getIpc();
-    if (!ipc) {
-      setInitError(
-        "Not running inside Electron. IPC is unavailable — make sure the app was launched via `npm run app:dev` or the Electron wrapper."
-      );
-      return;
-    }
+  /* ---- helpers ---- */
+  const modelKey = (m: { provider: string; id: string }) =>
+    `${m.provider}:${m.id}`;
 
-    // Load persisted model prefs
-    const prefs = loadPrefs();
-    setFavorites(prefs.favorites);
-    setBlocked(prefs.blocked);
+  /* ================================================================ */
+  /*  Event handler factory (used by lifecycle effect below)          */
+  /*                                                                  */
+  /*  Returned closure is registered on `pi:event` after a session    */
+  /*  has been created. It filters events by sessionIdRef so only     */
+  /*  this hook's session is processed.                               */
+  /* ================================================================ */
+  const buildEventHandler = useCallback(() => {
+    return (_event: any, data: any) => {
+      // Filter by session — use ref to avoid stale closures
+      if (!data || data.sessionId !== sessionIdRef.current) return;
+      const ev = data.event;
+      if (!ev) return;
 
-    // Listen for streaming events from the main process
-    ipc.on("pi:event", (_event: any, data: any) => {
-      switch (data.type) {
+      switch (ev.type) {
         case "message_update": {
-          const am = data.assistantMessageEvent;
-          if (am.type === "text_delta") {
-            setMessages((prev) => {
-              const next = [...prev];
-              const last = next[next.length - 1];
-              if (last && last.role === "assistant" && last.isStreaming) {
-                next[next.length - 1] = {
-                  ...last,
-                  content: last.content + am.delta,
-                };
+          const am = ev.assistantMessageEvent;
+          if (am.type === "text_delta" || am.type === "thinking_delta") {
+            const deltaType: "text" | "thinking" =
+              am.type === "text_delta" ? "text" : "thinking";
+            const newDelta = am.delta ?? "";
+
+            // If the delta type switches (thinking→text or text→thinking),
+            // flush the old buffer immediately so nothing is lost.
+            const flushBuffer = () => {
+              if (deltaTimerRef.current) {
+                clearTimeout(deltaTimerRef.current);
+                deltaTimerRef.current = null;
               }
-              return next;
-            });
+              const buf = deltaBufferRef.current;
+              if (!buf) return;
+              deltaBufferRef.current = null;
+              setMessages((prev) => {
+                let idx = prev.length - 1;
+                while (idx >= 0 && !(prev[idx].role === "assistant" && prev[idx].isStreaming)) idx--;
+                if (idx < 0) return prev;
+                const next = prev.slice();
+                const target = next[idx];
+                next[idx] = buf.type === "text"
+                  ? { ...target, content: target.content + buf.delta }
+                  : { ...target, thinking: (target.thinking || "") + buf.delta };
+                return next;
+              });
+            };
+
+            if (deltaBufferRef.current && deltaBufferRef.current.type !== deltaType) {
+              flushBuffer();
+              deltaBufferRef.current = { type: deltaType, delta: newDelta };
+            } else if (deltaBufferRef.current) {
+              deltaBufferRef.current = {
+                type: deltaBufferRef.current.type,
+                delta: deltaBufferRef.current.delta + newDelta,
+              };
+            } else {
+              deltaBufferRef.current = { type: deltaType, delta: newDelta };
+            }
+
+            if (!deltaTimerRef.current) {
+              deltaTimerRef.current = setTimeout(() => {
+                deltaTimerRef.current = null;
+                const buf = deltaBufferRef.current;
+                if (!buf) return;
+                deltaBufferRef.current = null;
+
+                startTransition(() => {
+                  setMessages((prev) => {
+                    let idx = prev.length - 1;
+                    while (
+                      idx >= 0 &&
+                      !(prev[idx].role === "assistant" && prev[idx].isStreaming)
+                    ) {
+                      idx--;
+                    }
+                    if (idx < 0) return prev;
+
+                    const next = prev.slice();
+                    const target = next[idx];
+                    if (buf.type === "text") {
+                      next[idx] = {
+                        ...target,
+                        content: target.content + buf.delta,
+                      };
+                    } else {
+                      next[idx] = {
+                        ...target,
+                        thinking: (target.thinking || "") + buf.delta,
+                      };
+                    }
+                    return next;
+                  });
+                });
+              }, THROTTLE_MS);
+            }
           }
           break;
         }
@@ -181,7 +313,7 @@ export function usePiChat() {
               id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               role: "tool",
               content: "",
-              toolName: data.toolName,
+              toolName: ev.toolName,
               timestamp: Date.now(),
             },
           ]);
@@ -190,9 +322,9 @@ export function usePiChat() {
 
         case "tool_execution_end": {
           const resultStr =
-            typeof data.result === "string"
-              ? data.result
-              : JSON.stringify(data.result, null, 2);
+            typeof ev.result === "string"
+              ? ev.result
+              : JSON.stringify(ev.result, null, 2);
           setMessages((prev) => {
             const next = [...prev];
             for (let i = next.length - 1; i >= 0; i--) {
@@ -203,7 +335,7 @@ export function usePiChat() {
                     resultStr.length > 2000
                       ? resultStr.slice(0, 2000) + "\n… (truncated)"
                       : resultStr,
-                  isToolError: data.isError ?? false,
+                  isToolError: ev.isError ?? false,
                 };
                 break;
               }
@@ -214,101 +346,211 @@ export function usePiChat() {
         }
 
         case "agent_start": {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `asst-${Date.now()}`,
-              role: "assistant",
-              content: "",
-              timestamp: Date.now(),
-              isStreaming: true,
-            },
-          ]);
+          // Flush any pending text delta before agent starts
+          if (deltaBufferRef.current) {
+            const buf = deltaBufferRef.current;
+            deltaBufferRef.current = null;
+            if (deltaTimerRef.current) {
+              clearTimeout(deltaTimerRef.current);
+              deltaTimerRef.current = null;
+            }
+            setMessages((prev) => {
+              let idx = prev.length - 1;
+              while (
+                idx >= 0 &&
+                !(prev[idx].role === "assistant" && prev[idx].isStreaming)
+              ) {
+                idx--;
+              }
+              if (idx < 0) return prev;
+              const next = prev.slice();
+              const target = next[idx];
+              if (buf.type === "text") {
+                next[idx] = { ...target, content: target.content + buf.delta };
+              } else {
+                next[idx] = { ...target, thinking: (target.thinking || "") + buf.delta };
+              }
+              return next;
+            });
+          }
           setIsStreaming(true);
           break;
         }
 
-        case "agent_end": {
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last && last.role === "assistant" && last.isStreaming) {
-              next[next.length - 1] = { ...last, isStreaming: false };
+        case "message_start": {
+          const msg = ev.message;
+          if (msg?.role === "assistant") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                role: "assistant",
+                content: "",
+                timestamp: Date.now(),
+                isStreaming: true,
+              },
+            ]);
+          }
+          break;
+        }
+
+        case "message_end": {
+          // Flush any remaining buffered deltas first — message_end fires
+          // before agent_end and we don't want to lose trailing content.
+          if (deltaBufferRef.current) {
+            const buf = deltaBufferRef.current;
+            deltaBufferRef.current = null;
+            if (deltaTimerRef.current) {
+              clearTimeout(deltaTimerRef.current);
+              deltaTimerRef.current = null;
             }
-            return next;
-          });
+            setMessages((prev) => {
+              let idx = prev.length - 1;
+              while (idx >= 0 && !(prev[idx].role === "assistant")) idx--;
+              if (idx < 0) return prev;
+              const next = prev.slice();
+              next[idx] = buf.type === "text"
+                ? { ...next[idx], content: next[idx].content + buf.delta }
+                : { ...next[idx], thinking: (next[idx].thinking || "") + buf.delta };
+              return next;
+            });
+          }
+
+          const msg = ev.message;
+          if (msg?.role === "assistant") {
+            setMessages((prev) => {
+              const next = [...prev];
+              let idx = next.length - 1;
+              while (
+                idx >= 0 &&
+                !(next[idx].role === "assistant")
+              ) {
+                idx--;
+              }
+              if (idx >= 0) {
+                next[idx] = { ...next[idx], isStreaming: false };
+              }
+              return next;
+            });
+          }
+          break;
+        }
+
+        case "agent_end": {
+          // Flush any pending buffered deltas before finalizing
+          // (agent_end may fire without message_end having run yet, or
+          //  message_end may have already cleared isStreaming).
+          if (deltaBufferRef.current) {
+            const buf = deltaBufferRef.current;
+            deltaBufferRef.current = null;
+            if (deltaTimerRef.current) {
+              clearTimeout(deltaTimerRef.current);
+              deltaTimerRef.current = null;
+            }
+            setMessages((prev) => {
+              let idx = prev.length - 1;
+              while (idx >= 0 && !(prev[idx].role === "assistant")) idx--;
+              if (idx < 0) return prev;
+              const next = prev.slice();
+              if (buf.type === "text") {
+                next[idx] = { ...next[idx], content: next[idx].content + buf.delta };
+              } else {
+                next[idx] = { ...next[idx], thinking: (next[idx].thinking || "") + buf.delta };
+              }
+              return next;
+            });
+          }
           setIsStreaming(false);
-          // Fetch updated stats after agent finishes
           refreshSessionStats();
           break;
         }
       }
-    });
-
-    // Single IPC call — returns session ready + models + auth status
-    try {
-      const result = await ipc.invoke("pi:init");
-      if (result.success) {
-        setIsReady(true);
-        setInitError(null);
-        applySnapshot(result, setModels, setCurrentModel, setAuthProviders);
-      } else {
-        setInitError(
-          result.error || "PI session could not start. Configure an API key in Settings → AI Provider."
-        );
-      }
-    } catch (e: any) {
-      setInitError(`PI init failed: ${e.message ?? String(e)}`);
-    }
+    };
   }, []);
 
-  /* ---- refresh models (used by the UI's refresh button) ---- */
+  /* ================================================================ */
+  /*  Refresh helpers                                                 */
+  /* ================================================================ */
+  const refreshCommands = useCallback(async () => {
+    const ipc = getIpc();
+    if (!ipc) return;
+    try {
+      const result = await ipc.invoke("pi:get-commands");
+      setCommands(result ?? []);
+    } catch (_) {}
+  }, []);
+
   const refreshModels = useCallback(async () => {
     const ipc = getIpc();
     if (!ipc) return;
     try {
       const result = await ipc.invoke("pi:get-models");
-      applySnapshot(result, setModels, setCurrentModel, setAuthProviders);
+      setModels(result.models ?? []);
+      setCurrentModel(result.currentModel ?? null);
+      setAuthProviders(result.providers ?? {});
     } catch (_) {}
   }, []);
 
-  /* ---- toggle favorite ---- */
-  const toggleFavorite = useCallback((key: string) => {
-    setFavorites((prev) => {
-      const next = prev.includes(key)
-        ? prev.filter((k) => k !== key)
-        : [...prev, key];
-      savePrefs(next, blocked);
-      return next;
-    });
-  }, [blocked]);
+  const refreshSessionStats = useCallback(async () => {
+    const ipc = getIpc();
+    const sid = sessionIdRef.current;
+    if (!ipc || !sid) return;
+    try {
+      const result = await ipc.invoke("pi:get-session-stats", {
+        sessionId: sid,
+      });
+      if (result.success) {
+        setSessionStats(result.stats ?? null);
+        setContextUsage(result.contextUsage ?? null);
+      }
+    } catch (_) {}
+  }, []);
 
-  /* ---- toggle block ---- */
-  const toggleBlock = useCallback((key: string) => {
-    setBlocked((prev) => {
-      const next = prev.includes(key)
-        ? prev.filter((k) => k !== key)
-        : [...prev, key];
-      // Remove from favorites if now blocked
-      const newFavs = next.includes(key)
-        ? favorites.filter((k) => k !== key)
-        : favorites;
-      savePrefs(newFavs, next);
-      if (newFavs.length !== favorites.length) setFavorites(newFavs);
-      return next;
-    });
-  }, [favorites]);
+  /* ================================================================ */
+  /*  Model prefs                                                     */
+  /* ================================================================ */
+  const toggleFavorite = useCallback(
+    (key: string) => {
+      setFavorites((prev) => {
+        const next = prev.includes(key)
+          ? prev.filter((k) => k !== key)
+          : [...prev, key];
+        savePrefs(next, blocked);
+        return next;
+      });
+    },
+    [blocked]
+  );
 
-  /* ---- unblock (from settings) ---- */
-  const unblockModel = useCallback((key: string) => {
-    setBlocked((prev) => {
-      const next = prev.filter((k) => k !== key);
-      savePrefs(favorites, next);
-      return next;
-    });
-  }, [favorites]);
+  const toggleBlock = useCallback(
+    (key: string) => {
+      setBlocked((prev) => {
+        const next = prev.includes(key)
+          ? prev.filter((k) => k !== key)
+          : [...prev, key];
+        const newFavs = next.includes(key)
+          ? favorites.filter((k) => k !== key)
+          : favorites;
+        savePrefs(newFavs, next);
+        if (newFavs.length !== favorites.length) setFavorites(newFavs);
+        return next;
+      });
+    },
+    [favorites]
+  );
 
-  /* ---- derived: filtered + sorted models (favorites first, blocked hidden) ---- */
+  const unblockModel = useCallback(
+    (key: string) => {
+      setBlocked((prev) => {
+        const next = prev.filter((k) => k !== key);
+        savePrefs(favorites, next);
+        return next;
+      });
+    },
+    [favorites]
+  );
+
+  /* ---- derived: filtered + sorted models ---- */
   const filteredModels = models
     .filter((m) => !blocked.includes(modelKey(m)))
     .sort((a, b) => {
@@ -317,67 +559,35 @@ export function usePiChat() {
       return bFav - aFav;
     });
 
-  /* ---- refresh session stats (cost + context) ---- */
-  const refreshSessionStats = useCallback(async () => {
-    const ipc = getIpc();
-    if (!ipc) return;
-    try {
-      const result = await ipc.invoke("pi:get-session-stats");
-      if (result.success) {
-        setSessionStats(result.stats ?? null);
-        setContextUsage(result.contextUsage ?? null);
-      }
-    } catch (_) {}
-  }, []);
-
-  /* ---- set API key (destroys + recreates session, returns full snapshot) ---- */
-  const setApiKey = useCallback(async (provider: string, key: string) => {
-    const ipc = getIpc();
-    if (!ipc) throw new Error("IPC not available");
-    const result = await ipc.invoke("pi:set-api-key", { provider, key });
-    if (!result.success) throw new Error(result.error ?? "Failed to set API key");
-    setIsReady(true);
-    setInitError(null);
-    applySnapshot(result, setModels, setCurrentModel, setAuthProviders);
-    return result;
-  }, []);
-
-  /* ---- set model ---- */
-  const setModel = useCallback(async (provider: string, modelId: string) => {
-    const ipc = getIpc();
-    if (!ipc) throw new Error("IPC not available");
-    const result = await ipc.invoke("pi:set-model", { provider, modelId });
-    if (!result.success) throw new Error(result.error ?? "Failed to set model");
-    applySnapshot(result, setModels, setCurrentModel, setAuthProviders);
-    return result;
-  }, []);
-
-  /* ---- reinitialize ---- */
-  const reinit = useCallback(async () => {
-    const ipc = getIpc();
-    if (!ipc) return false;
-    try {
-      const result = await ipc.invoke("pi:reinit");
-      if (result.success) {
-        setIsReady(true);
-        setInitError(null);
-        applySnapshot(result, setModels, setCurrentModel, setAuthProviders);
-      } else {
-        setInitError(result.error || "Re-init failed. Check your API key.");
-      }
-      return result.success;
-    } catch (e: any) {
-      setInitError(`Re-init failed: ${e.message ?? String(e)}`);
-      return false;
-    }
-  }, []);
-
-  /* ---- send message ---- */
+  /* ================================================================ */
+  /*  Core actions                                                    */
+  /* ================================================================ */
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!isReady) return;
+    async (text: string, attachments?: AttachedFile[]) => {
+      const sid = sessionIdRef.current;
+      if (!isReady || !sid) return;
       const ipc = getIpc();
       if (!ipc) return;
+
+      // Build full prompt with context
+      let fullPrompt = text;
+      if (attachments && attachments.length > 0) {
+        const parts: string[] = [];
+        for (const a of attachments) {
+          if (a.type === "text") {
+            if (a.content.trim() && !a.content.startsWith("📎 File:")) {
+              parts.push(
+                `--- Context: ${a.title}.md ---\n${a.content.trim()}\n--- End Context ---`
+              );
+            } else if (a.content.startsWith("📎 File:")) {
+              parts.push(a.content.trim());
+            }
+          }
+        }
+        if (parts.length > 0) {
+          fullPrompt = `${parts.join("\n\n")}\n\n${text}`;
+        }
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -386,11 +596,29 @@ export function usePiChat() {
           role: "user",
           content: text,
           timestamp: Date.now(),
+          attachments,
         },
       ]);
 
       try {
-        await ipc.invoke("pi:prompt", text);
+        const imageAttachments =
+          attachments?.filter((a) => a.type === "image") ?? [];
+        if (imageAttachments.length > 0) {
+          const formattedImages = imageAttachments.map((img) => ({
+            data: img.content,
+            mimeType: img.mimeType || "image/png",
+          }));
+          await ipc.invoke("pi:send-image", {
+            sessionId: sid,
+            text: fullPrompt,
+            images: formattedImages,
+          });
+        } else {
+          await ipc.invoke("pi:prompt", {
+            sessionId: sid,
+            text: fullPrompt,
+          });
+        }
       } catch (e: any) {
         setMessages((prev) => {
           const next = [...prev];
@@ -412,32 +640,458 @@ export function usePiChat() {
     [isReady]
   );
 
-  /* ---- abort ---- */
   const abort = useCallback(async () => {
     const ipc = getIpc();
-    if (ipc) await ipc.invoke("pi:abort");
+    const sid = sessionIdRef.current;
+    if (ipc && sid) await ipc.invoke("pi:abort", { sessionId: sid });
   }, []);
 
-  /* ---- clear ---- */
   const clear = useCallback(() => setMessages([]), []);
 
-  /* ---- mount / unmount ---- */
-  useEffect(() => {
-    init();
-    return () => {
-      const ipc = getIpc();
-      if (ipc) ipc.removeAllListeners("pi:event");
-    };
-  }, [init]);
+  /* ---- set API key (main destroys sessions; pi:auth-changed recreates them) ---- */
+  const setApiKey = useCallback(async (provider: string, key: string) => {
+    const ipc = getIpc();
+    if (!ipc) throw new Error("IPC not available");
+    const result = await ipc.invoke("pi:set-api-key", { provider, key });
+    if (!result.success)
+      throw new Error(result.error ?? "Failed to set API key");
+    setInitError(null);
+    setModels(result.models ?? []);
+    setCurrentModel(result.currentModel ?? null);
+    setAuthProviders(result.providers ?? {});
+    return result;
+  }, []);
 
+  /* ---- set model (broadcasts to all sessions) ---- */
+  const setModel = useCallback(async (provider: string, modelId: string) => {
+    const ipc = getIpc();
+    if (!ipc) throw new Error("IPC not available");
+    const result = await ipc.invoke("pi:broadcast-model", {
+      provider,
+      modelId,
+    });
+    if (!result.success)
+      throw new Error(result.error ?? "Failed to set model");
+    await refreshModels();
+    return result;
+  }, []);
+
+  /* ---- reinitialize ---- */
+  const reinit = useCallback(async () => {
+    const ipc = getIpc();
+    if (!ipc) return false;
+    try {
+      const result = await ipc.invoke("pi:reinit");
+      if (result.success) {
+        setIsReady(true);
+        setInitError(null);
+        sessionIdRef.current = result.sessionId;
+        setSessionId(result.sessionId);
+        setModels(result.models ?? []);
+        setCurrentModel(result.currentModel ?? null);
+        setAuthProviders(result.providers ?? {});
+      } else {
+        setInitError(result.error || "Re-init failed. Check your API key.");
+      }
+      return result.success;
+    } catch (e: any) {
+      setInitError(`Re-init failed: ${e.message ?? String(e)}`);
+      return false;
+    }
+  }, []);
+
+  /* ---- restart: destroy the owned session and create a fresh one of
+   *      the same type. Used by the "New" button so the AI doesn't see
+   *      any prior conversation history.                              */
+  const restart = useCallback(async () => {
+    const ipc = getIpc();
+    if (!ipc) return false;
+
+    const ownedSid = activeSessionRef.current;
+    if (ownedSid) {
+      try { await ipc.invoke("pi:abort", { sessionId: ownedSid }); } catch (_) {}
+      try { await ipc.invoke("pi:session-destroy", { sessionId: ownedSid }); } catch (_) {}
+      activeSessionRef.current = null;
+    }
+
+    const channel =
+      sessionType === "word"
+        ? "pi:word-session-create"
+        : "pi:session-create";
+
+    try {
+      const result: any = await ipc.invoke(channel);
+      if (!result.success) {
+        const msg = result.error || "Failed to start a new session.";
+        setInitError(msg);
+        return false;
+      }
+
+      sessionIdRef.current = result.sessionId;
+      activeSessionRef.current = result.sessionId;
+      setSessionId(result.sessionId);
+      setMessages([]);
+      setIsStreaming(false);
+      setSessionStats(null);
+      setContextUsage(null);
+      if (Array.isArray(result.models)) setModels(result.models);
+      setCurrentModel(result.currentModel ?? null);
+      if (result.providers) setAuthProviders(result.providers);
+      setIsReady(true);
+      setInitError(null);
+      return true;
+    } catch (e: any) {
+      console.warn("[usePiChat] restart failed:", e?.message ?? e);
+      setInitError(`Restart failed: ${e?.message ?? String(e)}`);
+      return false;
+    }
+  }, [sessionType]);
+
+  /* ================================================================ */
+  /*  Attachments                                                     */
+  /* ================================================================ */
+  const attachImages = useCallback(async (files: FileList) => {
+    const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    const newImages: AttachedImage[] = [];
+    let totalBytes = 0;
+    for (const file of Array.from(files)) {
+      if (!ACCEPTED.includes(file.type)) {
+        console.warn("[usePiChat] Skipping unsupported image:", file.name, file.type);
+        continue;
+      }
+      if (totalBytes + file.size > 20 * 1024 * 1024) {
+        console.warn("[usePiChat] Skipping image, exceeds 20MB total:", file.name);
+        continue;
+      }
+      const result = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const commaIdx = result.indexOf(",");
+      const base64 = result.slice(commaIdx + 1);
+      newImages.push({
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: file.name,
+        mimeType: file.type,
+        data: base64,
+        preview: result,
+      });
+      totalBytes += file.size;
+    }
+    setAttachedImages((prev) => [...prev, ...newImages]);
+  }, []);
+
+  const removeImage = useCallback((id: string) => {
+    setAttachedImages((prev) => prev.filter((img) => img.id !== id));
+  }, []);
+
+  const clearImages = useCallback(() => setAttachedImages([]), []);
+
+  const attachDocument = useCallback(async () => {
+    const ipc = getIpc();
+    if (!ipc) return [];
+    try {
+      const result = await ipc.invoke("pi:select-file");
+      if (result.canceled || !result.filePaths?.length) return [];
+
+      const newDocs: AttachedDocument[] = [];
+      for (const filePath of result.filePaths) {
+        const lower = filePath.toLowerCase();
+        const name =
+          filePath.replace(/\\/g, "/").split("/").pop() || filePath;
+
+        const isTextFormat =
+          lower.endsWith(".md") ||
+          lower.endsWith(".txt") ||
+          lower.endsWith(".log") ||
+          lower.endsWith(".json") ||
+          lower.endsWith(".yaml") ||
+          lower.endsWith(".yml") ||
+          lower.endsWith(".xml") ||
+          lower.endsWith(".html") ||
+          lower.endsWith(".css") ||
+          lower.endsWith(".js") ||
+          lower.endsWith(".ts") ||
+          lower.endsWith(".tsx") ||
+          lower.endsWith(".jsx");
+
+        let textContent: string | undefined;
+        if (isTextFormat) {
+          try {
+            const readResult = await ipc.invoke("pi:read-file-text", {
+              filePath,
+            });
+            if (readResult.success) {
+              textContent = readResult.content;
+            }
+          } catch (_) {}
+        }
+
+        newDocs.push({
+          id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name,
+          path: filePath,
+          textContent,
+        });
+      }
+
+      setAttachedDocuments((prev) => [...prev, ...newDocs]);
+      return newDocs;
+    } catch (e) {
+      console.error("Failed to attach document:", e);
+      return [];
+    }
+  }, []);
+
+  const removeDocument = useCallback((id: string) => {
+    setAttachedDocuments((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  const clearDocuments = useCallback(() => setAttachedDocuments([]), []);
+
+  const writePasteFiles = useCallback(
+    async (boxes: { title: string; content: string }[]) => {
+      const ipc = getIpc();
+      if (!ipc) return null;
+      try {
+        const result = await ipc.invoke("pi:write-paste-files", {
+          pasteBoxes: boxes,
+        });
+        if (result.success) return result.files ?? [];
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  /* ================================================================ */
+  /*  Lifecycle                                                       */
+  /*                                                                  */
+  /*  Each effect run owns its own handler + session via local        */
+  /*  closure variables. This survives React StrictMode's intentional */
+  /*  mount → cleanup → mount sequence: the cleanup deterministically */
+  /*  removes only this run's listener and only destroys the session  */
+  /*  this run created — even if init() is still mid-flight when      */
+  /*  cleanup fires (in which case `cancelled` causes init to bail    */
+  /*  before registering anything).                                   */
+  /* ================================================================ */
+  useEffect(() => {
+    let cancelled = false;
+    let localHandler: ((...args: any[]) => void) | null = null;
+    let localModelsHandler: ((...args: any[]) => void) | null = null;
+    let localAuthHandler:
+      | ((_event: unknown, payload?: AuthChangedPayload) => void)
+      | null = null;
+
+    const ipc = getIpc();
+
+    const init = async () => {
+      if (!ipc) {
+        if (!cancelled) {
+          setInitError(
+            "Not running inside Electron. IPC is unavailable — make sure the app was launched via `npm run app:dev` or the Electron wrapper."
+          );
+        }
+        return;
+      }
+
+      const prefs = loadPrefs();
+      if (cancelled) return;
+      setFavorites(prefs.favorites);
+      setBlocked(prefs.blocked);
+
+      // 1. Create the PI session FIRST so we have a valid sessionId
+      let sid: string | null = null;
+      let createdNew = false;
+      try {
+        let snap: any;
+
+        if (existingSessionId) {
+          sid = existingSessionId;
+          snap = { success: true, sessionId: sid, models: [], currentModel: null, providers: {} };
+        } else {
+          const channel =
+            sessionType === "word"
+              ? "pi:word-session-create"
+              : "pi:session-create";
+          snap = await ipc.invoke(channel);
+          sid = snap.sessionId;
+          createdNew = true;
+        }
+
+        // If unmounted while awaiting session-create, dispose what we just made.
+        if (cancelled) {
+          if (sid && createdNew) {
+            ipc.invoke("pi:session-destroy", { sessionId: sid }).catch(() => {});
+          }
+          return;
+        }
+
+        sessionIdRef.current = sid;
+        setSessionId(sid);
+        // Only own (and therefore destroy on unmount) sessions we created.
+        if (createdNew) activeSessionRef.current = sid;
+
+        if (!snap.success) {
+          setInitError(
+            snap.error || "PI session could not start. Configure an API key in Settings → AI Provider."
+          );
+          return;
+        }
+
+        setIsReady(true);
+        setInitError(null);
+        setModels(snap.models ?? []);
+        setCurrentModel(snap.currentModel ?? null);
+        setAuthProviders(snap.providers ?? {});
+      } catch (e: any) {
+        if (!cancelled) setInitError(`PI init failed: ${e.message ?? String(e)}`);
+        return;
+      }
+
+      // 2. Wire up the event listener — but only if we're still alive.
+      if (cancelled) return;
+
+      const handler = buildEventHandler();
+      localHandler = handler;
+      ipc.on("pi:event", handler);
+
+      // Cross-instance model sync: when any panel broadcasts a model
+      // change, the main process emits 'pi:models-changed'. Every hook
+      // instance refreshes so currentModel stays consistent everywhere.
+      const modelsHandler = () => {
+        if (cancelled) return;
+        refreshModels();
+      };
+      localModelsHandler = modelsHandler;
+      ipc.on("pi:models-changed", modelsHandler);
+
+      // API-key changes invalidate every existing PI session. The main
+      // process destroys them, then each mounted hook recreates the session
+      // type it owns so visible chat/Docs Area panels do not keep stale IDs.
+      const authHandler = async (_event: unknown, payload?: AuthChangedPayload) => {
+        if (cancelled || !ipc) return;
+
+        if (deltaTimerRef.current) {
+          clearTimeout(deltaTimerRef.current);
+          deltaTimerRef.current = null;
+        }
+        deltaBufferRef.current = null;
+
+        activeSessionRef.current = null;
+        sessionIdRef.current = null;
+        setSessionId(null);
+        setIsReady(false);
+        setIsStreaming(false);
+        setSessionStats(null);
+        setContextUsage(null);
+        setModels(payload?.models ?? []);
+        setCurrentModel(payload?.currentModel ?? null);
+        setAuthProviders(payload?.providers ?? {});
+
+        const channel =
+          sessionType === "word"
+            ? "pi:word-session-create"
+            : "pi:session-create";
+
+        try {
+          const snap = (await ipc.invoke(channel)) as PiSnapshotResult;
+          const newSid = snap.sessionId;
+
+          if (cancelled) {
+            if (newSid) {
+              ipc.invoke("pi:session-destroy", { sessionId: newSid }).catch(() => {});
+            }
+            return;
+          }
+
+          if (!snap.success || !newSid) {
+            setInitError(
+              snap.error || "PI session could not restart after the API key changed."
+            );
+            return;
+          }
+
+          sessionIdRef.current = newSid;
+          activeSessionRef.current = newSid;
+          setSessionId(newSid);
+          setIsReady(true);
+          setInitError(null);
+          setModels(snap.models ?? payload?.models ?? []);
+          setCurrentModel(snap.currentModel ?? payload?.currentModel ?? null);
+          setAuthProviders(snap.providers ?? payload?.providers ?? {});
+        } catch (e: unknown) {
+          if (!cancelled) {
+            const message = e instanceof Error ? e.message : String(e);
+            setInitError(`PI restart failed after API key change: ${message}`);
+          }
+        }
+      };
+      localAuthHandler = authHandler;
+      ipc.on("pi:auth-changed", authHandler);
+
+      try {
+        await refreshCommands();
+      } catch (_) {}
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+
+      if (deltaTimerRef.current) {
+        clearTimeout(deltaTimerRef.current);
+        deltaTimerRef.current = null;
+      }
+      deltaBufferRef.current = null;
+
+      // Remove THIS run's listeners (and only these — sibling hook
+      // instances have their own handlers registered separately).
+      if (ipc && localHandler) {
+        ipc.removeListener("pi:event", localHandler);
+      }
+      if (ipc && localModelsHandler) {
+        ipc.removeListener("pi:models-changed", localModelsHandler);
+      }
+      if (ipc && localAuthHandler) {
+        ipc.removeListener("pi:auth-changed", localAuthHandler);
+      }
+      // Destroy whatever session this hook currently owns (init's
+      // creation, or a later restart()'s replacement).
+      const ownedSid = activeSessionRef.current;
+      if (ipc && ownedSid) {
+        ipc.invoke("pi:session-destroy", { sessionId: ownedSid }).catch(() => {});
+        activeSessionRef.current = null;
+      }
+    };
+  }, []);
+
+  /* ================================================================ */
+  /*  Return                                                          */
+  /* ================================================================ */
   return {
+    sessionId,
     messages,
     isStreaming,
     isReady,
     initError,
     sendMessage,
+    attachedImages,
+    attachImages,
+    removeImage,
+    clearImages,
+    attachedDocuments,
+    attachDocument,
+    removeDocument,
+    clearDocuments,
     abort,
     clear,
+    restart,
     models,
     filteredModels,
     currentModel,
@@ -452,7 +1106,10 @@ export function usePiChat() {
     setApiKey,
     setModel,
     refreshModels,
+    writePasteFiles,
     refreshSessionStats,
     reinit,
+    commands,
+    refreshCommands,
   } as const;
 }

@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, Menu, MenuItem } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+app.setAppUserModelId('com.centralhub.app');
+
 /* ------------------------------------------------------------------ */
 /*  Watchdog acknowledgment — if the previous run was a guarded       */
 /*  restart, tell the watchdog we started successfully.               */
@@ -23,15 +25,23 @@ const fs = require('fs');
 
 const { setMainWindow } = require('./main/shared');
 const { destroyAllSessions } = require('./main/pi-sdk');
+const { registerAutoUpdater } = require('./main/updater');
 
 require('./main/ipc-pi-session').register(ipcMain);
 require('./main/ipc-word').register(ipcMain);
 require('./main/ipc-search').register(ipcMain);
+require('./main/ipc-stt').register(ipcMain);
 
 /* ------------------------------------------------------------------ */
 /*  Window creation                                                   */
 /* ------------------------------------------------------------------ */
 function createWindow() {
+  const appIcon = path.join(
+    __dirname,
+    'build',
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  );
+
   const window = new BrowserWindow({
     width: 1200,
     height: 750,
@@ -45,7 +55,7 @@ function createWindow() {
       symbolColor: '#FFFFFF',
       height: 8
     },
-    icon: path.join(__dirname, 'build/icon.png')
+    icon: appIcon
   });
   setMainWindow(window);
 
@@ -114,6 +124,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  registerAutoUpdater(() => BrowserWindow.getAllWindows()[0] || null);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

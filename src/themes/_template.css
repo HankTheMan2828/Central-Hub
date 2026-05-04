@@ -1,0 +1,123 @@
+/*
+ * CentralHub Theme Template
+ * =========================
+ * Copy this file and rename it to your theme id (e.g. ocean-dark.css).
+ * Replace "your-theme-id" in the selector below with the same id.
+ * Fill in every value marked REQUIRED.
+ * Then follow the 4-step checklist in README.md.
+ *
+ * All values should be plain hex colours (#rrggbb) or rgba() for the
+ * accent-10 / accent-5 semi-transparent variants.
+ * Do NOT use Tailwind class names here — pure CSS only.
+ */
+
+[data-theme="your-theme-id"] {
+
+  /* ── Backgrounds ─────────────────────────────────────────────────── */
+
+  /* Body / root background. Can be a gradient or solid colour.
+     Used on the <body> element directly.                               */
+  --ch-bg-page:        ;  /* REQUIRED  e.g. #0a0a0a */
+
+  /* Main panel backgrounds: LeftNav, SearchTab, SnippetsTab, TypingTab */
+  --ch-bg-base:        ;  /* REQUIRED  e.g. #0a0a0a */
+
+  /* Modal / dropdown backgrounds — slightly lighter than base          */
+  --ch-bg-surface:     ;  /* REQUIRED  e.g. #0c0c0c */
+
+  /* Input fields, slightly raised cards                                */
+  --ch-bg-elevated:    ;  /* REQUIRED  e.g. #1a1a1a */
+
+  /* Deep recessed areas: tool outputs, code blocks, AI inset regions   */
+  --ch-bg-inset:       ;  /* REQUIRED  e.g. #060606 */
+
+  /* Hover state overlay: what colour the bg shifts to on hover         */
+  --ch-bg-hover:       ;  /* REQUIRED  e.g. #0e0e0e */
+
+  /* ── Borders ─────────────────────────────────────────────────────── */
+
+  /* Main borders around panels / cards                                 */
+  --ch-border:         ;  /* REQUIRED  e.g. #333333 */
+
+  /* Inner dividers between sections within a panel                     */
+  --ch-border-subtle:  ;  /* REQUIRED  e.g. #222222 */
+
+  /* Very faint separators / row borders                                */
+  --ch-border-faint:   ;  /* REQUIRED  e.g. #1a1a1a */
+
+  /* ── Text ────────────────────────────────────────────────────────── */
+
+  /* Primary body text                                                  */
+  --ch-text:           ;  /* REQUIRED  e.g. #E0E0E0 */
+
+  /* Secondary / de-emphasised text                                     */
+  --ch-text-muted:     ;  /* REQUIRED  e.g. #999999 */
+
+  /* Labels, placeholders, very low-contrast text                       */
+  --ch-text-faint:     ;  /* REQUIRED  e.g. #666666 */
+
+  /* ── Accent ──────────────────────────────────────────────────────── */
+
+  /* Primary accent — active nav items, icons, headers, cursors         */
+  --ch-accent:         ;  /* REQUIRED  e.g. #FFB347 */
+
+  /* Accent at ~10% opacity — used for highlight backgrounds            */
+  --ch-accent-10:      ;  /* REQUIRED  e.g. rgba(255, 179, 71, 0.10) */
+
+  /* Accent at ~5% opacity — used for very subtle highlights            */
+  --ch-accent-5:       ;  /* REQUIRED  e.g. rgba(255, 179, 71, 0.05) */
+
+  /* ── State colours ───────────────────────────────────────────────── */
+
+  /* Success / confirmed (green family)                                 */
+  --ch-success:        ;  /* REQUIRED  e.g. #4CAF50 */
+
+  /* Error / destructive (red family)                                   */
+  --ch-error:          ;  /* REQUIRED  e.g. #FF5555 */
+
+  /* Error message background                                           */
+  --ch-error-bg:       ;  /* REQUIRED  e.g. #1a0a0a */
+
+  /* Error message border                                               */
+  --ch-error-border:   ;  /* REQUIRED  e.g. #442222 */
+
+  /* Muted error body text                                              */
+  --ch-error-text:     ;  /* REQUIRED  e.g. #CC9999 */
+
+  /* Warning / in-progress (amber/orange family)                        */
+  --ch-warning:        ;  /* REQUIRED  e.g. #FFA500 */
+
+  /* ── Code ────────────────────────────────────────────────────────── */
+
+  /* Code block / inline code background                                */
+  --ch-code-bg:        ;  /* REQUIRED  e.g. #1a1a1a */
+
+  /* Inline code text colour                                            */
+  --ch-code-text:      ;  /* REQUIRED  e.g. #E0A050 */
+
+  /* ── Links ───────────────────────────────────────────────────────── */
+
+  --ch-link:           ;  /* REQUIRED  e.g. #4DA6FF */
+  --ch-link-hover:     ;  /* REQUIRED  e.g. #66BBFF */
+
+  /* ── Misc ────────────────────────────────────────────────────────── */
+
+  /* Gold — used for starred / favourite items                          */
+  --ch-gold:           ;  /* REQUIRED  e.g. #FFD700 */
+
+  /* Optional gradient overlay on the page background.
+     Use `none` for flat colour, or a CSS gradient like:
+     linear-gradient(to bottom, rgba(255,179,71,0.035) 0%, transparent 35%)  */
+  --ch-bg-page-gradient: none;  /* OPTIONAL */
+
+  /* Background image. Use `none` for no wallpaper.
+     To use a custom image: url('/backgrounds/my-bg.jpg')
+     Images should be placed in the /public/backgrounds/ folder.        */
+  --ch-wallpaper:      none;  /* OPTIONAL */
+
+  /* Pane background with wallpaper — semi-transparent base colour.
+     Only takes effect when --ch-wallpaper is not `none`.
+     Adjust the alpha (last value) for more/less transparency.          */
+  --ch-pane-bg:        ;  /* REQUIRED  e.g. rgba(10, 10, 10, 0.85) */
+
+}

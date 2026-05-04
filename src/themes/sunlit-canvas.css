@@ -1,0 +1,51 @@
+/*
+ * CentralHub Theme - Sunlit Canvas
+ * A calm light theme with muted paper panels, ink-soft text, and restrained blue accents.
+ */
+
+[data-theme="sunlit-canvas"] {
+  /* Backgrounds */
+  --ch-bg-page:        #ECE7DE;
+  --ch-bg-base:        #F7F3EC;
+  --ch-bg-surface:     #FAF7F1;
+  --ch-bg-elevated:    #EEEFEA;
+  --ch-bg-inset:       #E2DED5;
+  --ch-bg-hover:       #E9E8E2;
+
+  /* Borders */
+  --ch-border:         #BFC6C3;
+  --ch-border-subtle:  #D4D8D5;
+  --ch-border-faint:   #E3E4DF;
+
+  /* Text */
+  --ch-text:           #242A2D;
+  --ch-text-muted:     #626B6F;
+  --ch-text-faint:     #8A9292;
+
+  /* Accent */
+  --ch-accent:         #4F718A;
+  --ch-accent-10:      rgba(79, 113, 138, 0.11);
+  --ch-accent-5:       rgba(79, 113, 138, 0.055);
+
+  /* State */
+  --ch-success:        #4D7F5D;
+  --ch-error:          #B24E5C;
+  --ch-error-bg:       #F3E4E5;
+  --ch-error-border:   #D5B3B7;
+  --ch-error-text:     #7B424A;
+  --ch-warning:        #9A793A;
+
+  /* Code */
+  --ch-code-bg:        #E8E8E1;
+  --ch-code-text:      #786044;
+
+  /* Links */
+  --ch-link:           #466E8A;
+  --ch-link-hover:     #2F566F;
+
+  /* Misc */
+  --ch-gold:           #9F7A2E;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: radial-gradient(circle at 12% 0%, rgba(79, 113, 138, 0.055) 0%, transparent 34%), radial-gradient(circle at 86% 4%, rgba(159, 122, 46, 0.06) 0%, transparent 30%);
+  --ch-pane-bg:        rgba(247, 243, 236, 0.94);
+}

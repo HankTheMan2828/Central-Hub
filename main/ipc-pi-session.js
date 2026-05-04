@@ -111,7 +111,7 @@ function register(ipcMain) {
     if (entry) await entry.session.abort();
   });
 
-  /* ---- set API key (destroys ALL sessions, recreates default) ---- */
+  /* ---- set API key (destroys ALL sessions, renderer hooks recreate their own) ---- */
   ipcMain.handle('pi:set-api-key', async (_event, { provider, key }) => {
     try {
       if (!getAuthStorage()) throw new Error('SDK not loaded');
@@ -125,19 +125,16 @@ function register(ipcMain) {
 
       await destroyAllSessions();
 
-      // Create a fresh default session
-      const session = await createSession();
-      const sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const unsub = session.subscribe((event) => {
-        if (getMainWindow() && !getMainWindow().isDestroyed()) {
-          try {
-            getMainWindow().webContents.send('pi:event', { sessionId, event: truncateEventForIpc(event) });
-          } catch (_) {}
-        }
-      });
-      piSessions.set(sessionId, { session, unsubscribe: unsub });
-      const snap = await snapshot(session);
-      return { success: true, sessionId, ...snap };
+      const snap = await snapshot(null);
+      if (getMainWindow() && !getMainWindow().isDestroyed()) {
+        try {
+          getMainWindow().webContents.send('pi:auth-changed', {
+            provider,
+            ...snap,
+          });
+        } catch (_) {}
+      }
+      return { success: true, ...snap };
     } catch (e) {
       console.error('[PI] set-api-key error:', e?.stack ?? e);
       return { success: false, error: e.message || String(e) };

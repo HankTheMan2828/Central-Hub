@@ -1,0 +1,52 @@
+/*  Shadow Fog — dark theme with cool grey-blue undertones.
+ *  Evokes fog drifting through shadows: slightly lifted backgrounds,
+ *  cooler tones, and softer contrast than Midnight's pure blacks.
+ *  The warm amber accent cuts through the mist.
+ */
+
+[data-theme="shadow-fog"] {
+  /* ── Backgrounds ─────────────────────────────────────────── */
+  --ch-bg-page:        #101014;
+  --ch-bg-base:        #16161c;
+  --ch-bg-surface:     #1a1a22;
+  --ch-bg-elevated:    #24242e;
+  --ch-bg-inset:       #0c0c12;
+  --ch-bg-hover:       #1e1e28;
+
+  /* ── Borders ─────────────────────────────────────────────── */
+  --ch-border:         #363644;
+  --ch-border-subtle:  #282836;
+  --ch-border-faint:   #1e1e2a;
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --ch-text:           #E2E2EA;
+  --ch-text-muted:     #9494A6;
+  --ch-text-faint:     #60607A;
+
+  /* ── Accent ──────────────────────────────────────────────── */
+  --ch-accent:         #FFB347;
+  --ch-accent-10:      rgba(255, 179, 71, 0.10);
+  --ch-accent-5:       rgba(255, 179, 71, 0.05);
+
+  /* ── State ───────────────────────────────────────────────── */
+  --ch-success:        #4CAF50;
+  --ch-error:          #FF5555;
+  --ch-error-bg:       #1c0c10;
+  --ch-error-border:   #442228;
+  --ch-error-text:     #CC99A0;
+  --ch-warning:        #FFA500;
+
+  /* ── Code ────────────────────────────────────────────────── */
+  --ch-code-bg:        #1e1e28;
+  --ch-code-text:      #E0A050;
+
+  /* ── Links ───────────────────────────────────────────────── */
+  --ch-link:           #6BAAEE;
+  --ch-link-hover:     #88CCFF;
+
+  /* ── Misc ────────────────────────────────────────────────── */
+  --ch-gold:           #FFD700;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: none;
+  --ch-pane-bg:        rgba(22, 22, 28, 0.88);
+}
