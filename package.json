@@ -6,7 +6,7 @@
   "author": "Central Hub",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HankTheMan2828/centralhub.git"
+    "url": "git+ssh://git@github.com/HankTheMan2828/Central-Hub.git"
   },
   "main": "main.js",
   "scripts": {
