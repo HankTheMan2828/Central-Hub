@@ -4,6 +4,12 @@
   "private": true,
   "description": "Central Hub desktop app",
   "author": "Central Hub",
+  "contributors": [
+    "HankTheMan2828",
+    "OpenAI Codex",
+    "DeepSeek V4",
+    "Qwen 3.6"
+  ],
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/HankTheMan2828/Central-Hub.git"
