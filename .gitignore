@@ -47,3 +47,9 @@ next-env.d.ts
 
 # PI hot-edit safety state
 .pi/watchdog.json
+
+# dev logs
+centralhub-*.log
+
+# local claude config
+.claude/

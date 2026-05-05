@@ -1,0 +1,51 @@
+/*
+ * CentralHub Theme - Morning Mist
+ * A cool, airy light theme with pale blue-white surfaces and a slate accent.
+ */
+
+[data-theme="morning-mist"] {
+  /* Backgrounds */
+  --ch-bg-page:        #E2E7EE;
+  --ch-bg-base:        #EEF2F7;
+  --ch-bg-surface:     #F4F7FB;
+  --ch-bg-elevated:    #E7ECF2;
+  --ch-bg-inset:       #D7DEE7;
+  --ch-bg-hover:       #E1E7EE;
+
+  /* Borders */
+  --ch-border:         #B5BFCB;
+  --ch-border-subtle:  #CBD3DC;
+  --ch-border-faint:   #DDE3EA;
+
+  /* Text */
+  --ch-text:           #1F2933;
+  --ch-text-muted:     #5A6776;
+  --ch-text-faint:     #8591A0;
+
+  /* Accent */
+  --ch-accent:         #3F6A8E;
+  --ch-accent-10:      rgba(63, 106, 142, 0.12);
+  --ch-accent-5:       rgba(63, 106, 142, 0.06);
+
+  /* State */
+  --ch-success:        #3F7A5C;
+  --ch-error:          #AC4856;
+  --ch-error-bg:       #EFDDDF;
+  --ch-error-border:   #CFAAAF;
+  --ch-error-text:     #783D45;
+  --ch-warning:        #8C6A2A;
+
+  /* Code */
+  --ch-code-bg:        #DCE3EB;
+  --ch-code-text:      #4A5A6E;
+
+  /* Links */
+  --ch-link:           #3A6788;
+  --ch-link-hover:     #244C6B;
+
+  /* Misc */
+  --ch-gold:           #8E7430;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: radial-gradient(circle at 14% 0%, rgba(63, 106, 142, 0.07) 0%, transparent 34%), radial-gradient(circle at 84% 6%, rgba(90, 103, 118, 0.05) 0%, transparent 32%);
+  --ch-pane-bg:        rgba(238, 242, 247, 0.94);
+}

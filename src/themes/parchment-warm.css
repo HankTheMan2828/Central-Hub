@@ -1,0 +1,52 @@
+/*
+ * CentralHub Theme - Parchment Warm
+ * A warm cream/beige paper palette with a soft amber accent.
+ * Companion to Sunlit Canvas, but warmer and slightly higher contrast.
+ */
+
+[data-theme="parchment-warm"] {
+  /* Backgrounds */
+  --ch-bg-page:        #EDE2CC;
+  --ch-bg-base:        #F6ECD6;
+  --ch-bg-surface:     #FAF1DD;
+  --ch-bg-elevated:    #F0E6CE;
+  --ch-bg-inset:       #E2D6BC;
+  --ch-bg-hover:       #ECE0C4;
+
+  /* Borders */
+  --ch-border:         #C5B68F;
+  --ch-border-subtle:  #D8CCAA;
+  --ch-border-faint:   #E5DBC0;
+
+  /* Text */
+  --ch-text:           #2B241A;
+  --ch-text-muted:     #6A5C45;
+  --ch-text-faint:     #94855F;
+
+  /* Accent */
+  --ch-accent:         #B07832;
+  --ch-accent-10:      rgba(176, 120, 50, 0.12);
+  --ch-accent-5:       rgba(176, 120, 50, 0.06);
+
+  /* State */
+  --ch-success:        #5C7F3F;
+  --ch-error:          #B5474C;
+  --ch-error-bg:       #F1DCD9;
+  --ch-error-border:   #D4ABA8;
+  --ch-error-text:     #7A3C40;
+  --ch-warning:        #A06A1F;
+
+  /* Code */
+  --ch-code-bg:        #E6DAB8;
+  --ch-code-text:      #6E4F1E;
+
+  /* Links */
+  --ch-link:           #8A5A1F;
+  --ch-link-hover:     #6B4514;
+
+  /* Misc */
+  --ch-gold:           #B8862D;
+  --ch-wallpaper:      none;
+  --ch-bg-page-gradient: radial-gradient(circle at 10% 0%, rgba(176, 120, 50, 0.08) 0%, transparent 36%), radial-gradient(circle at 88% 6%, rgba(184, 134, 45, 0.06) 0%, transparent 32%);
+  --ch-pane-bg:        rgba(246, 236, 214, 0.94);
+}
