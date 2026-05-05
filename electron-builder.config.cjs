@@ -32,7 +32,7 @@ function getPublishConfig() {
 module.exports = {
   appId: "com.centralhub.app",
   productName: "Central Hub",
-  artifactName: "CentralHub-${version}-${os}-${arch}.${ext}",
+  artifactName: "CentralHub-Setup.${ext}",
   directories: {
     output: "release",
   },
