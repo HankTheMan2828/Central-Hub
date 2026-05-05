@@ -2,6 +2,14 @@
 
 Central Hub is a dark-mode first, unified desktop environment built to centralize daily workflows. It connects seamlessly to local and remote AI models (utilizing the Pi Coding Agent SDK) to power intelligent chat, coding workflows, text editing, and more.
 
+## Download
+
+**[⬇ Download Central Hub for Windows](https://github.com/HankTheMan2828/Central-Hub/releases/latest/download/CentralHub-Setup.exe)**
+
+The link above always points to the latest version. After install, the app updates itself automatically — no need to come back here for new versions.
+
+> **Heads up:** Because this build isn't yet code-signed, Windows SmartScreen may show a blue "Windows protected your PC" warning the first time you run the installer. Click **More info** → **Run anyway**. This only happens on first install.
+
 ## Architecture
 - **Framework:** Next.js 15 (React 19)
 - **Desktop Wrapper:** Electron
