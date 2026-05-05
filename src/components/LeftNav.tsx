@@ -2,6 +2,8 @@
 
 import {
   MessageSquare,
+  CloudSun,
+  CodeXml,
   FileText,
   Keyboard,
   Search,
@@ -12,10 +14,11 @@ import {
 import type { ComponentType, SVGProps } from "react";
 
 export type TabId = "chat" | "word" | "typing" | "search" | "snippets";
+export type ChatSubTabId = "plain" | "coding";
 export type WordSubTabId = "editor" | "saves";
 
 interface SubTab {
-  id: WordSubTabId;
+  id: ChatSubTabId | WordSubTabId;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
@@ -28,7 +31,15 @@ interface NavTab {
 }
 
 const TABS: readonly NavTab[] = [
-  { id: "chat", label: "Agent Chat", icon: MessageSquare },
+  {
+    id: "chat",
+    label: "AI Central",
+    icon: MessageSquare,
+    subTabs: [
+      { id: "plain", label: "Plain Chat", icon: CloudSun },
+      { id: "coding", label: "Coding Agent", icon: CodeXml },
+    ],
+  },
   {
     id: "word",
     label: "Docs Area",
@@ -46,6 +57,8 @@ const TABS: readonly NavTab[] = [
 interface LeftNavProps {
   active: TabId;
   onSelect: (id: TabId) => void;
+  chatSubTab: ChatSubTabId;
+  onChatSubSelect: (id: ChatSubTabId) => void;
   wordSubTab: WordSubTabId;
   onWordSubSelect: (id: WordSubTabId) => void;
 }
@@ -53,6 +66,8 @@ interface LeftNavProps {
 export function LeftNav({
   active,
   onSelect,
+  chatSubTab,
+  onChatSubSelect,
   wordSubTab,
   onWordSubSelect,
 }: LeftNavProps) {
@@ -97,13 +112,18 @@ export function LeftNav({
                   {tab.subTabs!.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive =
-                      tab.id === "word" && wordSubTab === sub.id;
+                      tab.id === "chat"
+                        ? chatSubTab === sub.id
+                        : tab.id === "word" && wordSubTab === sub.id;
                     return (
                       <li key={sub.id}>
                         <button
                           type="button"
                           onClick={() => {
-                            if (tab.id === "word") onWordSubSelect(sub.id);
+                            if (tab.id === "chat")
+                              onChatSubSelect(sub.id as ChatSubTabId);
+                            if (tab.id === "word")
+                              onWordSubSelect(sub.id as WordSubTabId);
                           }}
                           aria-current={isSubActive ? "true" : undefined}
                           className={`w-full flex items-center gap-2 pl-9 pr-3 py-2 text-left text-[9px] font-bold uppercase tracking-widest border-l-2 transition-colors ${

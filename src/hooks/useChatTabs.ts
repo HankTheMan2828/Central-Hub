@@ -6,9 +6,10 @@ export interface ChatTab {
   id: string;
   num: number;
   title: string;
+  customTitle?: string;
 }
 
-const MAX_TABS = 4;
+const MAX_TABS = 8;
 
 let tabSeq = 1;
 function nextTabId() {
@@ -29,7 +30,11 @@ export function useChatTabs() {
 
   const renumber = useCallback(
     (list: ChatTab[]) =>
-      list.map((t, i) => ({ ...t, num: i + 1, title: `Chat ${i + 1}` })),
+      list.map((t, i) => ({
+        ...t,
+        num: i + 1,
+        title: t.customTitle || `Chat ${i + 1}`,
+      })),
     []
   );
 
@@ -63,12 +68,21 @@ export function useChatTabs() {
     [tabs, activeId, renumber]
   );
 
+  const updateTitle = useCallback((tabId: string, title: string) => {
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === tabId ? { ...tab, title, customTitle: title } : tab
+      )
+    );
+  }, []);
+
   return {
     tabs,
     activeId,
     switchTab,
     addTab,
     removeTab,
+    updateTitle,
     canAdd: tabs.length < MAX_TABS,
   };
 }

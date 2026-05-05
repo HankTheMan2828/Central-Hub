@@ -132,6 +132,7 @@ function savePrefs(favorites: string[], blocked: string[]) {
 /* ------------------------------------------------------------------ */
 export type UsePiChatOptions = {
   existingSessionId?: string;
+  disabled?: boolean;
   /**
    * "chat" (default) creates a normal coding-agent session via
    * `pi:session-create`. "word" creates a WordTab session via
@@ -159,6 +160,7 @@ type AuthChangedPayload = Pick<
 
 export function usePiChat(options?: UsePiChatOptions) {
   const existingSessionId = options?.existingSessionId;
+  const disabled = options?.disabled ?? false;
   const sessionType: "chat" | "word" = options?.sessionType ?? "chat";
 
   /* ---- session identity ---- */
@@ -563,14 +565,16 @@ export function usePiChat(options?: UsePiChatOptions) {
   /*  Core actions                                                    */
   /* ================================================================ */
   const sendMessage = useCallback(
-    async (text: string, attachments?: AttachedFile[]) => {
+    async (text: string, attachments?: AttachedFile[], hiddenContext?: string) => {
       const sid = sessionIdRef.current;
       if (!isReady || !sid) return;
       const ipc = getIpc();
       if (!ipc) return;
 
       // Build full prompt with context
-      let fullPrompt = text;
+      let fullPrompt = hiddenContext?.trim()
+        ? `${hiddenContext.trim()}\n\n${text}`
+        : text;
       if (attachments && attachments.length > 0) {
         const parts: string[] = [];
         for (const a of attachments) {
@@ -585,7 +589,9 @@ export function usePiChat(options?: UsePiChatOptions) {
           }
         }
         if (parts.length > 0) {
-          fullPrompt = `${parts.join("\n\n")}\n\n${text}`;
+          fullPrompt = hiddenContext?.trim()
+            ? `${hiddenContext.trim()}\n\n${parts.join("\n\n")}\n\n${text}`
+            : `${parts.join("\n\n")}\n\n${text}`;
         }
       }
 
@@ -647,6 +653,10 @@ export function usePiChat(options?: UsePiChatOptions) {
   }, []);
 
   const clear = useCallback(() => setMessages([]), []);
+
+  const restoreMessages = useCallback((nextMessages: ChatMessage[]) => {
+    setMessages(nextMessages.map((m) => ({ ...m, isStreaming: false })));
+  }, []);
 
   /* ---- set API key (main destroys sessions; pi:auth-changed recreates them) ---- */
   const setApiKey = useCallback(async (provider: string, key: string) => {
@@ -887,6 +897,23 @@ export function usePiChat(options?: UsePiChatOptions) {
       | ((_event: unknown, payload?: AuthChangedPayload) => void)
       | null = null;
 
+    if (disabled) {
+      sessionIdRef.current = null;
+      activeSessionRef.current = null;
+      setSessionId(null);
+      setIsReady(false);
+      setIsStreaming(false);
+      setInitError(null);
+      setModels([]);
+      setCurrentModel(null);
+      setAuthProviders({});
+      setSessionStats(null);
+      setContextUsage(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const ipc = getIpc();
 
     const init = async () => {
@@ -1069,7 +1096,14 @@ export function usePiChat(options?: UsePiChatOptions) {
         activeSessionRef.current = null;
       }
     };
-  }, []);
+  }, [
+    disabled,
+    existingSessionId,
+    sessionType,
+    buildEventHandler,
+    refreshCommands,
+    refreshModels,
+  ]);
 
   /* ================================================================ */
   /*  Return                                                          */
@@ -1091,6 +1125,8 @@ export function usePiChat(options?: UsePiChatOptions) {
     clearDocuments,
     abort,
     clear,
+    restoreMessages,
+    setMessages: restoreMessages,
     restart,
     models,
     filteredModels,

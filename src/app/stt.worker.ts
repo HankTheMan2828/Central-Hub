@@ -2,11 +2,14 @@
 /*  STT Web Worker — local Whisper via Transformers.js                */
 /*  Main thread sends Float32 audio chunks → gets back text           */
 /* ------------------------------------------------------------------ */
-import { pipeline, type Pipeline, env } from "@xenova/transformers";
+const { pipeline, env } = (0, eval)('require')("@xenova/transformers") as {
+  pipeline: (...args: unknown[]) => Promise<unknown>;
+  env: { allowLocalModels: boolean };
+};
 
 env.allowLocalModels = false;
 
-let transcriber: Pipeline | null = null;
+let transcriber: ((audio: Float32Array) => Promise<{ text?: string }>) | null = null;
 let loadingPromise: Promise<void> | null = null;
 
 const MIN_AUDIO_SAMPLES = 1600;
@@ -26,7 +29,7 @@ function loadWhisper(): Promise<void> {
 
   self.postMessage({ type: "status", status: "loading", message: "Loading Whisper…" });
 
-  loadingPromise = pipeline(
+  const promise = pipeline(
     "automatic-speech-recognition",
     "Xenova/whisper-tiny.en",
     {
@@ -85,8 +88,8 @@ function loadWhisper(): Promise<void> {
       },
     },
   )
-    .then((tr) => {
-      transcriber = tr as unknown as Pipeline;
+    .then((tr: unknown) => {
+      transcriber = tr as (audio: Float32Array) => Promise<{ text?: string }>;
       // Some Transformers.js builds skip the "ready" status event — emit it
       // ourselves so the UI never gets stuck on "loading".
       self.postMessage({ type: "status", status: "ready", message: "Whisper ready" });
@@ -100,7 +103,8 @@ function loadWhisper(): Promise<void> {
       loadingPromise = null;
     });
 
-  return loadingPromise;
+  loadingPromise = promise;
+  return promise;
 }
 
 interface TranscribeMsg {

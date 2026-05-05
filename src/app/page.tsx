@@ -1,10 +1,11 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
+  Archive,
   Menu,
   Settings,
-  FolderOpen,
   Cpu,
+  Clock,
   Eye,
   EyeOff,
   Check,
@@ -14,11 +15,28 @@ import {
   Ban,
   Star,
   Palette,
+  MessageSquare,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useChatTabs } from "@/hooks/useChatTabs";
+import { useChatHistory, type ChatHistoryEntry } from "@/hooks/useChatHistory";
 import { ChatTabBar } from "@/components/ChatTabBar";
 import { ChatPanel, type ChatPanelMetrics } from "@/components/ChatPanel";
-import { LeftNav, type TabId, type WordSubTabId } from "@/components/LeftNav";
+import {
+  LeftNav,
+  type ChatSubTabId,
+  type TabId,
+  type WordSubTabId,
+} from "@/components/LeftNav";
+import {
+  CodingAgentPanel,
+  CODING_WORKSPACES_UPDATED_EVENT,
+  deleteArchivedWorkspace,
+  loadArchivedWorkspaces,
+  restoreArchivedWorkspace,
+  type WorkspaceOption,
+} from "@/components/CodingAgentPanel";
 import { WordTab } from "@/components/tabs/WordTab";
 import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
@@ -30,19 +48,21 @@ import { useTheme, THEMES } from "@/components/ThemeProvider";
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 export default function Home() {
-  const { tabs, activeId, switchTab, addTab, removeTab, canAdd } =
+  const { tabs, activeId, switchTab, addTab, removeTab, updateTitle, canAdd } =
     useChatTabs();
-
-  // We need a shared chat reference for the settings panel (model selector, API keys)
-  // The first tab's chat instance serves as the "global" reference for settings.
-  // Model changes broadcast to all sessions via pi:broadcast-model.
-  const sharedChat = usePiChat();
+  const { history, upsertEntry, removeEntry, updateEntryTitle } =
+    useChatHistory();
 
   const { theme, setTheme } = useTheme();
 
   /* ---- menu state ---- */
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuTab, setMenuTab] = useState<"settings" | "documents">("settings");
+  const [menuTab, setMenuTab] = useState<"settings" | "archive">("settings");
+  const [archivedWorkspaces, setArchivedWorkspaces] =
+    useState<WorkspaceOption[]>(loadArchivedWorkspaces);
+  const [confirmArchiveDelete, setConfirmArchiveDelete] = useState<string | null>(
+    null
+  );
 
   /* ---- API key state ---- */
   const [openRouterKey, setOpenRouterKey] = useState("");
@@ -64,10 +84,19 @@ export default function Home() {
 
   /* ---- Active tab in the left-nav ---- */
   const [activeNavTab, setActiveNavTab] = useState<TabId>("chat");
+  const [chatSubTab, setChatSubTab] = useState<ChatSubTabId>("plain");
   const [wordSubTab, setWordSubTab] = useState<WordSubTabId>("saves");
+
+  // We need a shared chat reference for the settings panel (model selector, API keys)
+  // The first tab's chat instance serves as the "global" reference for settings.
+  // Model changes broadcast to all sessions via pi:broadcast-model.
+  const sharedChat = usePiChat({ disabled: chatSubTab !== "plain" });
 
   /* ---- Metrics from the active chat tab (for right column) ---- */
   const [activeMetrics, setActiveMetrics] = useState<ChatPanelMetrics | null>(null);
+  const [resumeEntry, setResumeEntry] = useState<ChatHistoryEntry | null>(null);
+  const [historyPreview, setHistoryPreview] = useState<ChatHistoryEntry | null>(null);
+  const [confirmHistoryDelete, setConfirmHistoryDelete] = useState<string | null>(null);
 
   // Stable ref for activeId so handleMetricsChange never changes reference.
   // This prevents every mounted ChatPanel's useEffect from re-firing on
@@ -83,6 +112,57 @@ export default function Home() {
       }
     },
     []
+  );
+
+  const handleSaveHistory = useCallback(
+    (entryId: string, messages: Parameters<typeof upsertEntry>[1]) =>
+      upsertEntry(entryId, messages),
+    [upsertEntry]
+  );
+
+  const handleResumeHistory = useCallback(
+    (entry: ChatHistoryEntry) => {
+      if (activeMetrics?.hasMessages && canAdd) addTab();
+      setResumeEntry(entry);
+      setActiveNavTab("chat");
+      setChatSubTab("plain");
+    },
+    [activeMetrics?.hasMessages, addTab, canAdd]
+  );
+
+  const refreshArchivedWorkspaces = useCallback(() => {
+    setArchivedWorkspaces(loadArchivedWorkspaces());
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener(
+      CODING_WORKSPACES_UPDATED_EVENT,
+      refreshArchivedWorkspaces
+    );
+    return () => {
+      window.removeEventListener(
+        CODING_WORKSPACES_UPDATED_EVENT,
+        refreshArchivedWorkspaces
+      );
+    };
+  }, [refreshArchivedWorkspaces]);
+
+  const handleRestoreArchivedWorkspace = useCallback(
+    (workspace: WorkspaceOption) => {
+      restoreArchivedWorkspace(workspace);
+      setConfirmArchiveDelete(null);
+      refreshArchivedWorkspaces();
+    },
+    [refreshArchivedWorkspaces]
+  );
+
+  const handleDeleteArchivedWorkspace = useCallback(
+    (workspaceId: string) => {
+      deleteArchivedWorkspace(workspaceId);
+      setConfirmArchiveDelete(null);
+      refreshArchivedWorkspaces();
+    },
+    [refreshArchivedWorkspaces]
   );
 
   /* ---- handlers ---- */
@@ -190,14 +270,14 @@ export default function Home() {
                 </button>
                 <button
                   className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                    menuTab === "documents"
+                    menuTab === "archive"
                       ? "bg-white/[0.04] text-[var(--ch-text)]"
                       : "text-[var(--ch-text-muted)] hover:text-[var(--ch-text)]"
                   }`}
-                  onClick={() => setMenuTab("documents")}
+                  onClick={() => setMenuTab("archive")}
                 >
-                  <FolderOpen className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
-                  Documents &amp; Media
+                  <Archive className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
+                  Archived Workspaces
                 </button>
               </div>
 
@@ -221,7 +301,7 @@ export default function Home() {
                               className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-sm text-left transition-colors ${
                                 isActive
                                   ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
-                                  : "border-[var(--ch-border-subtle)] hover:border-[#FFB347]/40 hover:bg-white/[0.02]"
+                                  : "border-[var(--ch-border-subtle)] hover:border-[var(--ch-accent)] hover:bg-[var(--ch-accent-5)]"
                               }`}
                             >
                               <span
@@ -439,11 +519,82 @@ export default function Home() {
                   </div>
                 )}
 
-                {menuTab === "documents" && (
+                {menuTab === "archive" && (
                   <div className="flex flex-col gap-6">
-                    <p className="text-[12px] opacity-25 italic">
-                      Document history displayed here.
-                    </p>
+                    <section>
+                      <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
+                        <Archive className="w-3.5 h-3.5" />
+                        Archived Workspaces
+                      </h3>
+                      {archivedWorkspaces.length === 0 ? (
+                        <p className="text-[12px] opacity-25 italic">
+                          No archived workspaces.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {archivedWorkspaces.map((workspace) => (
+                            <div
+                              key={workspace.id}
+                              className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm p-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <Archive className="w-3.5 h-3.5 mt-0.5 text-[var(--ch-text-faint)] shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[12px] font-mono text-[var(--ch-text)] truncate">
+                                    {workspace.name}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
+                                    {workspace.path}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreArchivedWorkspace(workspace)}
+                                  className="h-[26px] px-2 flex items-center gap-1.5 border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--ch-success)] hover:border-[var(--ch-success)] rounded-sm transition-colors shrink-0"
+                                  title={`Restore ${workspace.name}`}
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span className="text-[10px] uppercase tracking-wider">
+                                    Restore
+                                  </span>
+                                </button>
+                                {confirmArchiveDelete !== workspace.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmArchiveDelete(workspace.id)}
+                                    className="h-[26px] w-[26px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--ch-error)] hover:border-[var(--ch-error)] rounded-sm transition-colors shrink-0"
+                                    title={`Delete ${workspace.name}`}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                              {confirmArchiveDelete === workspace.id && (
+                                <div className="mt-2 flex items-center gap-1.5 text-[10px]">
+                                  <span className="text-[var(--ch-error-text)]">
+                                    Delete workspace and chats?
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteArchivedWorkspace(workspace.id)}
+                                    className="px-1.5 py-0.5 border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm uppercase tracking-wider transition-colors"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmArchiveDelete(null)}
+                                    className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
                   </div>
                 )}
               </div>
@@ -456,14 +607,24 @@ export default function Home() {
       <div className="w-1/5 max-w-[240px] min-w-[200px] flex flex-col gap-2 h-full">
         <div
           className="border border-[var(--ch-border)] p-3 flex justify-between items-center cursor-pointer hover:bg-[var(--ch-bg-hover)] transition-colors rounded-sm select-none"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => {
+            if (!menuOpen) setMenuTab("settings");
+            setMenuOpen(!menuOpen);
+          }}
         >
           <span className="font-bold text-[10px] tracking-widest uppercase">
             Menu
           </span>
           <Menu className="w-4 h-4" />
         </div>
-        <LeftNav active={activeNavTab} onSelect={setActiveNavTab} wordSubTab={wordSubTab} onWordSubSelect={setWordSubTab} />
+        <LeftNav
+          active={activeNavTab}
+          onSelect={setActiveNavTab}
+          chatSubTab={chatSubTab}
+          onChatSubSelect={setChatSubTab}
+          wordSubTab={wordSubTab}
+          onWordSubSelect={setWordSubTab}
+        />
       </div>
 
       {/*
@@ -473,7 +634,14 @@ export default function Home() {
         the wrapper invisible to flex layout when active; `display:
         none` fully hides while preserving the React subtree.
       */}
-      <div style={{ display: activeNavTab === "chat" ? "contents" : "none" }}>
+      <div
+        style={{
+          display:
+            activeNavTab === "chat" && chatSubTab === "plain"
+              ? "contents"
+              : "none",
+        }}
+      >
           {/* ==================== CENTER COLUMN ==================== */}
           <div className="flex-1 min-h-0 min-w-[400px] flex flex-col gap-2">
             {/* Chat Tab Bar */}
@@ -495,6 +663,11 @@ export default function Home() {
                   isActive={tab.id === activeId}
                   onStartNew={() => {}}
                   onMetricsChange={handleMetricsChange}
+                  onSaveHistory={handleSaveHistory}
+                  resumeEntry={tab.id === activeId ? resumeEntry : null}
+                  onResumeHandled={() => setResumeEntry(null)}
+                  onTitleChange={updateTitle}
+                  onHistoryTitleChange={updateEntryTitle}
                 />
               ))}
             </div>
@@ -788,8 +961,178 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            <div className="mt-2 flex flex-col min-h-0" style={{ maxHeight: "40%" }}>
+              <div className="flex items-center mb-2 shrink-0">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60">
+                  <Clock className="w-3.5 h-3.5" />
+                  History
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
+                {history.length === 0 && (
+                  <p className="text-[11px] opacity-20 italic">No past chats yet.</p>
+                )}
+                {history.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="w-full text-left px-2.5 py-2 border border-[var(--ch-border-subtle)] rounded-sm hover:bg-white/[0.04] hover:border-[var(--ch-border)] transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-3 h-3 opacity-30 shrink-0" />
+                      <span className="text-[11px] truncate flex-1">
+                        {entry.title}
+                      </span>
+                      {confirmHistoryDelete !== entry.id && (
+                        <button
+                          className="opacity-0 group-hover:opacity-40 hover:!opacity-80 hover:text-[var(--ch-error)] transition-all shrink-0"
+                          onClick={() => setConfirmHistoryDelete(entry.id)}
+                          title="Delete"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {confirmHistoryDelete === entry.id && (
+                      <div className="flex items-center gap-2 mt-1 ml-5">
+                        <span className="text-[9px] text-[var(--ch-error-text)]">
+                          Delete?
+                        </span>
+                        <button
+                          className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm transition-colors"
+                          onClick={() => {
+                            removeEntry(entry.id);
+                            setConfirmHistoryDelete(null);
+                          }}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm transition-colors"
+                          onClick={() => setConfirmHistoryDelete(null)}
+                        >
+                          No
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between mt-1 ml-5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] opacity-25 font-mono">
+                          {new Date(entry.timestamp).toLocaleDateString(
+                            undefined,
+                            { month: "short", day: "numeric" }
+                          )}
+                        </span>
+                        <span className="text-[9px] opacity-20">
+                          {entry.messageCount} msgs
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm transition-colors"
+                          onClick={() => setHistoryPreview(entry)}
+                        >
+                          View
+                        </button>
+                        <button
+                          className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm transition-colors"
+                          onClick={() => handleResumeHistory(entry)}
+                        >
+                          Resume
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
       </div>
+
+      <div
+        style={{
+          display:
+            activeNavTab === "chat" && chatSubTab === "coding"
+              ? "contents"
+              : "none",
+        }}
+      >
+        <CodingAgentPanel theme="workbench" />
+      </div>
+
+      {historyPreview && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={() => setHistoryPreview(null)}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-8 pointer-events-none">
+            <div className="pointer-events-auto w-[600px] max-h-[80vh] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ch-border)] shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MessageSquare className="w-4 h-4 opacity-40 shrink-0" />
+                  <span className="text-[12px] font-bold truncate">
+                    {historyPreview.title}
+                  </span>
+                  <span className="text-[10px] opacity-30 font-mono shrink-0">
+                    {new Date(historyPreview.timestamp).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-1.5 text-[10px] uppercase tracking-wider border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm transition-colors"
+                    onClick={() => {
+                      handleResumeHistory(historyPreview);
+                      setHistoryPreview(null);
+                    }}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    className="p-1 hover:bg-white/[0.08] rounded-sm transition-colors"
+                    onClick={() => setHistoryPreview(null)}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+                {historyPreview.messages.map((message) =>
+                  message.role === "user" ? (
+                    <div key={message.id} className="flex justify-end">
+                      <div className="max-w-[85%] border border-[var(--ch-border)] bg-[var(--ch-bg-elevated)] px-4 py-2.5 rounded-sm">
+                        <p className="text-[12px] leading-relaxed whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                      </div>
+                    </div>
+                  ) : message.role === "assistant" ? (
+                    <div key={message.id} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 ml-1">
+                        PI
+                      </span>
+                      <div className="border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-4 py-2.5 rounded-sm">
+                        <p className="text-[12px] leading-relaxed whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                      </div>
+                    </div>
+                  ) : message.role === "tool" && message.content ? (
+                    <div key={message.id} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-mono uppercase tracking-wider opacity-30 ml-1">
+                        {message.toolName}
+                      </span>
+                      <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-3 py-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap break-all max-h-[100px] overflow-y-auto opacity-40">
+                        {message.content}
+                      </div>
+                    </div>
+                  ) : null
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/*
         Same persistence trick as the Chat columns above: keep WordTab

@@ -71,7 +71,7 @@ export function ChatTabBar({
               }}
               title={tab.title}
             >
-              <span className="truncate max-w-[100px]">{tab.title}</span>
+              <span className="truncate max-w-[140px]">{tab.title}</span>
 
               {/* Close X — only if more than 1 tab exists */}
               {!isOnlyTab && (
@@ -129,7 +129,7 @@ export function ChatTabBar({
         <button
           className="h-[28px] w-[28px] flex items-center justify-center border border-[var(--ch-border)] rounded-r-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-text-muted)] hover:bg-[var(--ch-bg-hover)] transition-colors shrink-0"
           onClick={onAdd}
-          title={`New chat tab (${tabs.length}/4)`}
+          title={`New chat tab (${tabs.length}/8)`}
         >
           <Plus className="w-3.5 h-3.5" />
         </button>

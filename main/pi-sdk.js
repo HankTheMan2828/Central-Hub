@@ -23,8 +23,8 @@ let cachedModelsAt = 0;        // timestamp of last fetch
 
 const MODEL_CACHE_MS = 30_000; // re-fetch at most every 30 s
 
-/** PI session cwd — the project root, not frontend/. */
-const appCwd = path.resolve(__dirname, '..', '..');
+/** PI session cwd: the app project root. */
+const appCwd = path.resolve(__dirname, '..');
 
 /* ------------------------------------------------------------------ */
 /*  Windows console containment                                       */

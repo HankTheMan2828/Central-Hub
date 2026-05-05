@@ -8,13 +8,15 @@ import { createContext, useContext, useEffect, useState } from "react";
 /*  globals.css, then add one entry here. Nothing else needs changing. */
 /* ------------------------------------------------------------------ */
 export const THEMES = [
-  { id: "sunlit-canvas", label: "Sunlit Canvas" },
-  { id: "daylight-dark", label: "Daylight Dark" },
-  { id: "shadow-fog",    label: "Shadow Fog" },
-  { id: "midnight",      label: "Midnight" },
-  { id: "aurora-ember",  label: "Aurora Ember" },
-  { id: "copper-violet", label: "Copper Violet" },
-  { id: "harbor-dusk",   label: "Harbor Dusk" },
+  { id: "daylight-dark", label: "Daylight Dark", mode: "dark" },
+  { id: "shadow-fog", label: "Shadow Fog", mode: "dark" },
+  { id: "midnight", label: "Midnight", mode: "dark" },
+  { id: "aurora-ember", label: "Aurora Ember", mode: "dark" },
+  { id: "copper-violet", label: "Copper Violet", mode: "dark" },
+  { id: "harbor-dusk", label: "Harbor Dusk", mode: "dark" },
+  { id: "sunlit-canvas", label: "Sunlit Canvas", mode: "light" },
+  { id: "parchment-warm", label: "Parchment Warm", mode: "light" },
+  { id: "morning-mist", label: "Morning Mist", mode: "light" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

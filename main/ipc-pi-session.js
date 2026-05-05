@@ -15,6 +15,7 @@
 /*    - pi:get-session-stats                                          */
 /*    - pi:send-image                                                 */
 /*    - pi:broadcast-model     (also emits pi:models-changed)         */
+/*    - pi:generate-title                                             */
 /*    - pi:write-paste-files                                          */
 /*    - pi:select-file                                                */
 /*    - pi:read-file-text                                             */
@@ -249,6 +250,56 @@ function register(ipcMain) {
     } catch (e) {
       console.error('[PI] broadcast-model error:', e);
       return { success: false, error: e.message || String(e) };
+    }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /*  Generate a short tab title from the first exchange                 */
+  /*  Uses a direct OpenRouter API call — no PI session overhead.        */
+  /* ------------------------------------------------------------------ */
+  ipcMain.handle('pi:generate-title', async (_event, { userMessage, assistantMessage }) => {
+    try {
+      const auth = getAuthStorage();
+      if (!auth) return { success: false, error: 'Auth not ready' };
+
+      let apiKey = null;
+      try { apiKey = await getModelRegistry()?.getApiKeyForProvider?.('openrouter'); } catch (_) {}
+      if (!apiKey) try { apiKey = await auth.getApiKey('openrouter'); } catch (_) {}
+      if (!apiKey) apiKey = process.env.OPENROUTER_API_KEY;
+      if (!apiKey) return { success: false, error: 'No API key' };
+
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'qwen/qwen3-8b',
+          max_tokens: 20,
+          messages: [
+            {
+              role: 'user',
+              content: `Generate a very short title (2-5 words, no quotes, no punctuation at end) for this conversation. Just output the title, nothing else.\n\nUser: ${String(userMessage).slice(0, 300)}\nAssistant: ${String(assistantMessage || '').slice(0, 200)}`,
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error('[PI] generate-title API error:', res.status, errText.slice(0, 200));
+        return { success: false, error: `API ${res.status}` };
+      }
+
+      const data = await res.json();
+      const raw = data?.choices?.[0]?.message?.content ?? '';
+      const clean = raw.trim().replace(/^["']|["']$/g, '').replace(/\.+$/, '').slice(0, 40);
+      console.log('[PI] Generated title:', clean || '(empty)');
+      return { success: true, title: clean || null };
+    } catch (e) {
+      console.error('[PI] generate-title error:', e?.message ?? e);
+      return { success: false, error: e?.message || String(e) };
     }
   });
 

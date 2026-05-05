@@ -31,12 +31,14 @@ import {
 } from "lucide-react";
 import {
   usePiChat,
+  type ChatMessage,
   type SessionStatsData,
   type ContextUsageData,
   type CurrentModel,
   type PiModel,
 } from "@/hooks/usePiChat";
 import { useSTT } from "@/hooks/useSTT";
+import type { ChatHistoryEntry } from "@/hooks/useChatHistory";
 
 /* ------------------------------------------------------------------ */
 /*  Data types                                                        */
@@ -94,6 +96,7 @@ export interface ChatPanelMetrics {
   currentModel: CurrentModel | null;
   models: PiModel[];
   isReady: boolean;
+  hasMessages: boolean;
 }
 
 interface ChatPanelProps {
@@ -101,9 +104,24 @@ interface ChatPanelProps {
   isActive: boolean;
   onStartNew: () => void;
   onMetricsChange?: (tabId: string, metrics: ChatPanelMetrics) => void;
+  onSaveHistory?: (entryId: string, messages: ChatMessage[]) => string;
+  resumeEntry?: ChatHistoryEntry | null;
+  onResumeHandled?: () => void;
+  onTitleChange?: (tabId: string, title: string) => void;
+  onHistoryTitleChange?: (entryId: string, title: string) => void;
 }
 
-export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: ChatPanelProps) {
+export function ChatPanel({
+  tabId,
+  isActive,
+  onStartNew,
+  onMetricsChange,
+  onSaveHistory,
+  resumeEntry,
+  onResumeHandled,
+  onTitleChange,
+  onHistoryTitleChange,
+}: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const chat = usePiChat();
@@ -114,6 +132,13 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
 
   /* ---- sent context history ---- */
   const [sentContextItems, setSentContextItems] = useState<SentContextItem[]>([]);
+  const historyEntryIdRef = useRef("");
+  const lastHistorySignatureRef = useRef("");
+  const resumeContextRef = useRef<string | null>(null);
+  const resumedEntryIdRef = useRef<string | null>(null);
+  const wasStreamingRef = useRef(false);
+  const wasStreamingForTitleRef = useRef(false);
+  const titleGeneratedRef = useRef(false);
 
   /* ---- autocomplete ---- */
   const [acOpen, setAcOpen] = useState(false);
@@ -178,6 +203,7 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
       currentModel: chat.currentModel,
       models: chat.models,
       isReady: chat.isReady,
+      hasMessages: chat.messages.length > 0,
     });
   }, [
     tabId,
@@ -187,6 +213,95 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
     chat.currentModel,
     chat.models,
     chat.isReady,
+    chat.messages.length,
+  ]);
+
+  useEffect(() => {
+    if (!resumeEntry) return;
+    if (resumeEntry.id === resumedEntryIdRef.current) return;
+    resumedEntryIdRef.current = resumeEntry.id;
+    const transcript = resumeEntry.messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) =>
+        `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`
+      )
+      .join("\n\n");
+    resumeContextRef.current = `--- Prior conversation (resume context) ---\n${transcript}\n--- End prior conversation ---\n\nContinue from where we left off. The user's next message follows.`;
+    historyEntryIdRef.current = resumeEntry.id;
+    lastHistorySignatureRef.current = "";
+    titleGeneratedRef.current = false;
+    chat.restart().then(() => {
+      chat.restoreMessages(resumeEntry.messages);
+      onResumeHandled?.();
+    });
+  }, [resumeEntry, chat, onResumeHandled]);
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = chat.isStreaming;
+    if (!wasStreaming || chat.isStreaming) return;
+    if (!onSaveHistory || chat.messages.length === 0) return;
+    if (!chat.messages.some((m) => m.role === "user")) return;
+
+    const signature = JSON.stringify(
+      chat.messages.map((m) => [m.id, m.role, m.content, m.isStreaming])
+    );
+    if (signature === lastHistorySignatureRef.current) return;
+    lastHistorySignatureRef.current = signature;
+
+    const savedId = onSaveHistory(historyEntryIdRef.current, chat.messages);
+    if (savedId && savedId !== historyEntryIdRef.current) {
+      historyEntryIdRef.current = savedId;
+    }
+  }, [chat.isStreaming, chat.messages, onSaveHistory]);
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingForTitleRef.current;
+    wasStreamingForTitleRef.current = chat.isStreaming;
+    if (titleGeneratedRef.current || !onTitleChange || !wasStreaming || chat.isStreaming) {
+      return;
+    }
+
+    const userMessage = chat.messages.find((m) => m.role === "user");
+    const assistantMessage = chat.messages.find(
+      (m) => m.role === "assistant" && !m.isStreaming
+    );
+    if (!userMessage || !assistantMessage) return;
+
+    titleGeneratedRef.current = true;
+    let ipc: { invoke: (channel: string, args: unknown) => Promise<unknown> } | null =
+      null;
+    try {
+      ipc = (0, eval)("require")("electron").ipcRenderer;
+    } catch {}
+    ipc
+      ?.invoke("pi:generate-title", {
+        userMessage: userMessage.content,
+        assistantMessage: assistantMessage.content,
+      })
+      .then((result) => {
+        if (
+          typeof result !== "object" ||
+          result === null ||
+          !("success" in result) ||
+          !("title" in result) ||
+          result.success !== true ||
+          typeof result.title !== "string"
+        ) {
+          return;
+        }
+        onTitleChange(tabId, result.title);
+        if (historyEntryIdRef.current) {
+          onHistoryTitleChange?.(historyEntryIdRef.current, result.title);
+        }
+      })
+      .catch(() => {});
+  }, [
+    chat.isStreaming,
+    chat.messages,
+    onHistoryTitleChange,
+    onTitleChange,
+    tabId,
   ]);
 
   /* ================================================================ */
@@ -385,7 +500,7 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
       await chat.setApiKey("openrouter", openRouterKey.trim());
       setKeySaved(true);
       setTimeout(() => setKeySaved(false), 3000);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to save API key:", e);
     } finally {
       setSavingKey(false);
@@ -398,7 +513,7 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
       setModelSearch("");
       try {
         await chat.setModel(model.provider, model.id);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("Failed to set model:", e);
       }
     },
@@ -522,7 +637,9 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
       chat.writePasteFiles(boxesWithContent).catch(() => {});
     }
 
-    chat.sendMessage(mainText, attachments);
+    const hiddenContext = resumeContextRef.current;
+    resumeContextRef.current = null;
+    chat.sendMessage(mainText, attachments, hiddenContext ?? undefined);
 
     setDraftText("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -717,44 +834,11 @@ export function ChatPanel({ tabId, isActive, onStartNew, onMetricsChange }: Chat
             }
 
             if (msg.role === "tool") {
-              const ToolIcon =
-                msg.toolName === "bash"
-                  ? Terminal
-                  : msg.toolName === "read"
-                  ? FileText
-                  : msg.toolName === "edit"
-                  ? FileCode
-                  : msg.toolName === "write"
-                  ? FileUp
-                  : FileCode;
-
               return (
-                <div key={msg.id} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 ml-1">
-                    <ToolIcon className="w-3 h-3 opacity-40" />
-                    <span className="text-[10px] font-mono uppercase tracking-wider opacity-40">
-                      {msg.toolName}
-                    </span>
-                    {msg.isToolError && (
-                      <AlertTriangle className="w-3 h-3 text-[var(--ch-error)]" />
-                    )}
-                  </div>
-                  {msg.content && (
-                    <div
-                      className={`border rounded-sm px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto ${
-                        msg.isToolError
-                          ? "border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] text-[var(--ch-error-text)]"
-                          : "border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] text-[var(--ch-text-muted)]"
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
-                  )}
-                  {!msg.content && (
-                    <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-3 py-2">
-                      <Loader2 className="w-3 h-3 animate-spin text-[var(--ch-text-faint)]" />
-                    </div>
-                  )}
+                <div key={msg.id} className="flex items-center gap-1 ml-1 py-0.5">
+                  <span className="text-[10px] opacity-25 italic">
+                    Used {msg.toolName?.replace(/_/g, ' ') || 'a tool'}{msg.isToolError ? ' (error)' : ''}
+                  </span>
                 </div>
               );
             }

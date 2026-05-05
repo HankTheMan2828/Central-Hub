@@ -11,6 +11,8 @@
 @import "../themes/aurora-ember.css";
 @import "../themes/copper-violet.css";
 @import "../themes/harbor-dusk.css";
+@import "../themes/parchment-warm.css";
+@import "../themes/morning-mist.css";
 
 /* ── Tailwind design tokens ───────────────────────────────────────── */
 @theme {
