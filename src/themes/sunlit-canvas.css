@@ -1,51 +1,51 @@
 /*
  * CentralHub Theme - Sunlit Canvas
- * A calm light theme with muted paper panels, ink-soft text, and restrained blue accents.
+ * A warm, sunny light theme with golden yellows, amber accents, and cream panels.
  */
 
 [data-theme="sunlit-canvas"] {
   /* Backgrounds */
-  --ch-bg-page:        #ECE7DE;
-  --ch-bg-base:        #F7F3EC;
-  --ch-bg-surface:     #FAF7F1;
-  --ch-bg-elevated:    #EEEFEA;
-  --ch-bg-inset:       #E2DED5;
-  --ch-bg-hover:       #E9E8E2;
+  --ch-bg-page:        #F4E2B5;
+  --ch-bg-base:        #FBEBC0;
+  --ch-bg-surface:     #FEF3CC;
+  --ch-bg-elevated:    #F6E5B3;
+  --ch-bg-inset:       #E8D49A;
+  --ch-bg-hover:       #F2DDA8;
 
   /* Borders */
-  --ch-border:         #BFC6C3;
-  --ch-border-subtle:  #D4D8D5;
-  --ch-border-faint:   #E3E4DF;
+  --ch-border:         #D2A85C;
+  --ch-border-subtle:  #E0BC7C;
+  --ch-border-faint:   #ECCE9C;
 
   /* Text */
-  --ch-text:           #242A2D;
-  --ch-text-muted:     #626B6F;
-  --ch-text-faint:     #8A9292;
+  --ch-text:           #2E1F08;
+  --ch-text-muted:     #6B4F1F;
+  --ch-text-faint:     #957747;
 
   /* Accent */
-  --ch-accent:         #4F718A;
-  --ch-accent-10:      rgba(79, 113, 138, 0.11);
-  --ch-accent-5:       rgba(79, 113, 138, 0.055);
+  --ch-accent:         #C77A1C;
+  --ch-accent-10:      rgba(199, 122, 28, 0.14);
+  --ch-accent-5:       rgba(199, 122, 28, 0.07);
 
   /* State */
-  --ch-success:        #4D7F5D;
-  --ch-error:          #B24E5C;
-  --ch-error-bg:       #F3E4E5;
-  --ch-error-border:   #D5B3B7;
-  --ch-error-text:     #7B424A;
-  --ch-warning:        #9A793A;
+  --ch-success:        #5C7A2C;
+  --ch-error:          #B23D3F;
+  --ch-error-bg:       #F4D9D5;
+  --ch-error-border:   #D4A5A2;
+  --ch-error-text:     #7A2F32;
+  --ch-warning:        #B26B12;
 
   /* Code */
-  --ch-code-bg:        #E8E8E1;
-  --ch-code-text:      #786044;
+  --ch-code-bg:        #EDD89B;
+  --ch-code-text:      #6E4A12;
 
   /* Links */
-  --ch-link:           #466E8A;
-  --ch-link-hover:     #2F566F;
+  --ch-link:           #A85F14;
+  --ch-link-hover:     #84480A;
 
   /* Misc */
-  --ch-gold:           #9F7A2E;
+  --ch-gold:           #C99022;
   --ch-wallpaper:      none;
-  --ch-bg-page-gradient: radial-gradient(circle at 12% 0%, rgba(79, 113, 138, 0.055) 0%, transparent 34%), radial-gradient(circle at 86% 4%, rgba(159, 122, 46, 0.06) 0%, transparent 30%);
-  --ch-pane-bg:        rgba(247, 243, 236, 0.94);
+  --ch-bg-page-gradient: radial-gradient(circle at 20% 0%, rgba(255, 200, 80, 0.22) 0%, transparent 38%), radial-gradient(circle at 88% 8%, rgba(199, 122, 28, 0.10) 0%, transparent 34%);
+  --ch-pane-bg:        rgba(251, 235, 192, 0.94);
 }

@@ -57,7 +57,9 @@ export default function Home() {
 
   /* ---- menu state ---- */
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuTab, setMenuTab] = useState<"settings" | "archive">("settings");
+  const [menuTab, setMenuTab] = useState<"themes" | "settings" | "archive">("themes");
+  const [agentSpace, setAgentSpace] = useState<"workbench" | "terminal">("workbench");
+  const [defaultModel, setDefaultModel] = useState<{ provider: string; id: string } | null>(null);
   const [archivedWorkspaces, setArchivedWorkspaces] =
     useState<WorkspaceOption[]>(loadArchivedWorkspaces);
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState<string | null>(
@@ -259,6 +261,17 @@ export default function Home() {
               <div className="flex border-b border-[var(--ch-border)] shrink-0">
                 <button
                   className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
+                    menuTab === "themes"
+                      ? "bg-white/[0.04] text-[var(--ch-text)]"
+                      : "text-[var(--ch-text-muted)] hover:text-[var(--ch-text)]"
+                  }`}
+                  onClick={() => setMenuTab("themes")}
+                >
+                  <Palette className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
+                  Theme Area
+                </button>
+                <button
+                  className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
                     menuTab === "settings"
                       ? "bg-white/[0.04] text-[var(--ch-text)]"
                       : "text-[var(--ch-text-muted)] hover:text-[var(--ch-text)]"
@@ -277,44 +290,88 @@ export default function Home() {
                   onClick={() => setMenuTab("archive")}
                 >
                   <Archive className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
-                  Archived Workspaces
+                  Archive
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6">
-                {menuTab === "settings" && (
+                {menuTab === "themes" && (
                   <div className="flex flex-col gap-6">
-                    {/* Theme Selector */}
+                    {/* Theme grid — dark left, light right */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {(["dark", "light"] as const).map((mode) => (
+                        <section key={mode}>
+                          <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
+                            <Palette className="w-3.5 h-3.5" />
+                            {mode === "dark" ? "Dark" : "Light"}
+                          </h3>
+                          <div className="flex flex-col gap-1.5">
+                            {THEMES.filter((t) => t.mode === mode).map((t) => {
+                              const isActive = theme === t.id;
+                              return (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => setTheme(t.id)}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-sm text-left transition-colors ${
+                                    isActive
+                                      ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
+                                      : "border-[var(--ch-border-subtle)] hover:border-[#FFB347]/40 hover:bg-white/[0.02]"
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-2 h-2 rounded-full shrink-0 ${
+                                      isActive ? "bg-[var(--ch-accent)]" : "bg-[var(--ch-border)]"
+                                    }`}
+                                  />
+                                  <span
+                                    className={`text-[12px] font-mono ${
+                                      isActive ? "text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
+                                    }`}
+                                  >
+                                    {t.label}
+                                  </span>
+                                  {isActive && (
+                                    <Check className="w-3.5 h-3.5 text-[var(--ch-success)] ml-auto shrink-0" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+
+                    {/* Agent Space */}
                     <section>
                       <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
-                        <Palette className="w-3.5 h-3.5" />
-                        Theme
+                        <Cpu className="w-3.5 h-3.5" />
+                        Agent Space
                       </h3>
-                      <div className="flex flex-col gap-1.5">
-                        {THEMES.map((t) => {
-                          const isActive = theme === t.id;
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { id: "workbench", label: "Workbench", swatch: "bg-[#4DA3FF]" },
+                          { id: "terminal", label: "Terminal", swatch: "bg-[#49D17C]" },
+                        ] as const).map((opt) => {
+                          const isActive = agentSpace === opt.id;
                           return (
                             <button
-                              key={t.id}
+                              key={opt.id}
                               type="button"
-                              onClick={() => setTheme(t.id)}
+                              onClick={() => setAgentSpace(opt.id)}
                               className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-sm text-left transition-colors ${
                                 isActive
                                   ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
-                                  : "border-[var(--ch-border-subtle)] hover:border-[var(--ch-accent)] hover:bg-[var(--ch-accent-5)]"
+                                  : "border-[var(--ch-border-subtle)] hover:border-[#FFB347]/40 hover:bg-white/[0.02]"
                               }`}
                             >
-                              <span
-                                className={`w-2 h-2 rounded-full shrink-0 ${
-                                  isActive ? "bg-[var(--ch-accent)]" : "bg-[var(--ch-border)]"
-                                }`}
-                              />
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${opt.swatch}`} />
                               <span
                                 className={`text-[12px] font-mono ${
                                   isActive ? "text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
                                 }`}
                               >
-                                {t.label}
+                                {opt.label}
                               </span>
                               {isActive && (
                                 <Check className="w-3.5 h-3.5 text-[var(--ch-success)] ml-auto shrink-0" />
@@ -322,6 +379,52 @@ export default function Home() {
                             </button>
                           );
                         })}
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {menuTab === "settings" && (
+                  <div className="flex flex-col gap-6">
+                    {/* Default Model */}
+                    <section>
+                      <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
+                        <Cpu className="w-3.5 h-3.5" />
+                        Default Model
+                      </h3>
+                      <div className="flex flex-col gap-2">
+                        <select
+                          value={defaultModel ? `${defaultModel.provider}:${defaultModel.id}` : ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) {
+                              setDefaultModel(null);
+                            } else {
+                              const [provider, ...rest] = val.split(":");
+                              setDefaultModel({ provider, id: rest.join(":") });
+                            }
+                          }}
+                          className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border)] text-[12px] px-3 py-2 rounded-sm outline-none focus:border-[var(--ch-text-faint)] transition-colors"
+                        >
+                          <option value="">Use last selected model</option>
+                          {sharedChat.filteredModels.map((m) => (
+                            <option key={`${m.provider}:${m.id}`} value={`${m.provider}:${m.id}`}>
+                              {m.provider}/{m.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-2 py-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              defaultModel ? "bg-[var(--ch-success)]" : "bg-[var(--ch-text-faint)]"
+                            }`}
+                          />
+                          <span className="text-[11px] opacity-50">
+                            {defaultModel
+                              ? "New chats start with this model"
+                              : "New chats follow the last selected model"}
+                          </span>
+                        </div>
                       </div>
                     </section>
 
