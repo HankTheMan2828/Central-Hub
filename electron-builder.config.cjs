@@ -19,6 +19,7 @@ function getPublishConfig() {
           provider: "github",
           owner,
           repo,
+          releaseType: "release",
         },
       ];
     }
