@@ -271,7 +271,7 @@ export default function Home() {
   );
 
   const chatMainContent = (
-    <div className="h-full min-h-0 min-w-[400px] flex flex-col gap-2 p-3">
+    <div className="h-full min-h-0 min-w-[400px] box-border flex flex-col gap-2 p-3">
       <ChatTabBar
         tabs={tabs}
         activeId={activeId}
@@ -300,7 +300,7 @@ export default function Home() {
   );
 
   const chatRightContent = (
-    <div className="h-full min-h-0 p-4 overflow-y-auto flex flex-col gap-4">
+    <div className="h-full min-h-0 box-border overflow-y-auto flex flex-col gap-4 p-3">
       <div>
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
           <Cpu className="w-3.5 h-3.5" />
@@ -605,11 +605,11 @@ export default function Home() {
     activeNavTab === "chat" && chatSubTab === "plain" ? (
       chatMainContent
     ) : activeNavTab === "chat" && chatSubTab === "coding" ? (
-      <div className="h-full min-h-0 flex gap-2 p-3">
+      <div className="h-full min-h-0 box-border flex gap-2 p-3">
         <CodingAgentPanel theme="workbench" />
       </div>
     ) : activeNavTab === "word" ? (
-      <div className="h-full min-h-0 p-3 flex flex-col">
+      <div className="h-full min-h-0 box-border flex flex-col p-3">
         <WordTab
           subTab={wordSubTab}
           onSubTabChange={setWordSubTab}
@@ -618,15 +618,15 @@ export default function Home() {
         />
       </div>
     ) : activeNavTab === "typing" ? (
-      <div className="h-full min-h-0 p-3 flex flex-col">
+      <div className="h-full min-h-0 box-border flex flex-col p-3">
         <TypingTab />
       </div>
     ) : activeNavTab === "search" ? (
-      <div className="h-full min-h-0 p-3 flex flex-col">
+      <div className="h-full min-h-0 box-border flex flex-col p-3">
         <SearchTab />
       </div>
     ) : (
-      <div className="h-full min-h-0 p-3 flex flex-col">
+      <div className="h-full min-h-0 box-border flex flex-col p-3">
         <SnippetsTab />
       </div>
     );
@@ -637,7 +637,7 @@ export default function Home() {
     ) : activeNavTab === "word" ? (
       <div
         id="clouds-word-ai-slot"
-        className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0"
+        className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
       />
     ) : undefined;
 
@@ -645,7 +645,7 @@ export default function Home() {
     activeNavTab === "word" ? (
       <div
         id="clouds-word-saves-slot"
-        className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0"
+        className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0 [&>div]:rounded-[1.85rem]"
       />
     ) : undefined;
 

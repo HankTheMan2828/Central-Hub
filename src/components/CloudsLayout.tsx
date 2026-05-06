@@ -14,15 +14,21 @@ interface CloudsLayoutProps {
 function BubblePanel({
   children,
   className = "",
+  innerClassName = "",
 }: {
   children: ReactNode;
   className?: string;
+  innerClassName?: string;
 }) {
   return (
     <section
-      className={`min-h-0 min-w-0 rounded-3xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] shadow-2xl overflow-hidden ${className}`}
+      className={`min-h-0 min-w-0 rounded-[3rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] shadow-2xl overflow-hidden p-4 ${className}`}
     >
-      {children}
+      <div
+        className={`h-full min-h-0 min-w-0 overflow-hidden rounded-[2.35rem] ${innerClassName}`}
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -39,16 +45,8 @@ export function CloudsLayout({
   const hasRight = Boolean(right);
 
   const gridTemplateColumns = useMemo(() => {
-    if (hasLeft && hasRight) {
-      return "minmax(250px, 0.62fr) minmax(620px, 1.72fr) minmax(270px, 0.68fr)";
-    }
-    if (hasLeft) {
-      return "minmax(250px, 0.62fr) minmax(620px, 1.75fr)";
-    }
-    if (hasRight) {
-      return "minmax(620px, 1.75fr) minmax(270px, 0.68fr)";
-    }
-    return "minmax(620px, 1020px)";
+    const side = hasLeft || hasRight ? "minmax(300px, 0.58fr)" : "minmax(0, 1fr)";
+    return `${side} minmax(980px, 1120px) ${side}`;
   }, [hasLeft, hasRight]);
 
   return (
@@ -92,22 +90,33 @@ export function CloudsLayout({
 
       <div className="h-full w-full px-8 pb-10 pt-20 flex items-center justify-center">
         <div
-          className="grid w-full max-w-[1580px] items-center gap-9 min-h-0"
+          className="grid w-full max-w-[1840px] items-center gap-9 min-h-0"
           style={{ gridTemplateColumns }}
         >
           {hasLeft && (
-            <BubblePanel className="h-[min(58vh,590px)] self-center rounded-[2.25rem]">
+            <BubblePanel
+              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              innerClassName="rounded-[1.85rem]"
+            >
               {left}
             </BubblePanel>
           )}
-          <BubblePanel className="h-[min(88vh,900px)] max-h-[900px] flex flex-col rounded-[3.5rem]">
+          {!hasLeft && <div aria-hidden className="min-w-0" />}
+          <BubblePanel
+            className="h-[min(92vh,980px)] max-h-[980px] rounded-[3.5rem]"
+            innerClassName="flex flex-col rounded-[2.75rem]"
+          >
             {main}
           </BubblePanel>
           {hasRight && (
-            <BubblePanel className="h-[min(58vh,590px)] self-center rounded-[2.25rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0">
+            <BubblePanel
+              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              innerClassName="rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
+            >
               {right}
             </BubblePanel>
           )}
+          {!hasRight && <div aria-hidden className="min-w-0" />}
         </div>
       </div>
     </div>
