@@ -25,16 +25,35 @@ const STORAGE_KEY = "ch-theme";
 const DEFAULT_THEME: ThemeId = "midnight";
 
 /* ------------------------------------------------------------------ */
+/*  Layout registry                                                    */
+/*  "foundations" = original minimalist column layout                  */
+/*  "clouds"      = floating bubble layout (see CloudsLayout.tsx)      */
+/* ------------------------------------------------------------------ */
+export const LAYOUTS = [
+  { id: "foundations", label: "Foundations" },
+  { id: "clouds", label: "Clouds" },
+] as const;
+
+export type LayoutId = (typeof LAYOUTS)[number]["id"];
+
+const LAYOUT_STORAGE_KEY = "ch-layout";
+const DEFAULT_LAYOUT: LayoutId = "foundations";
+
+/* ------------------------------------------------------------------ */
 /*  Context                                                            */
 /* ------------------------------------------------------------------ */
 interface ThemeContextValue {
   theme: ThemeId;
   setTheme: (id: ThemeId) => void;
+  layout: LayoutId;
+  setLayout: (id: LayoutId) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: DEFAULT_THEME,
   setTheme: () => {},
+  layout: DEFAULT_LAYOUT,
+  setLayout: () => {},
 });
 
 export function useTheme() {
@@ -46,6 +65,7 @@ export function useTheme() {
 /* ------------------------------------------------------------------ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(DEFAULT_THEME);
+  const [layout, setLayoutState] = useState<LayoutId>(DEFAULT_LAYOUT);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -60,6 +80,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       document.documentElement.setAttribute("data-theme", DEFAULT_THEME);
     }
+
+    try {
+      const savedLayout = window.localStorage.getItem(
+        LAYOUT_STORAGE_KEY
+      ) as LayoutId | null;
+      if (savedLayout && LAYOUTS.some((l) => l.id === savedLayout)) {
+        setLayoutState(savedLayout);
+        document.documentElement.setAttribute("data-layout", savedLayout);
+      } else {
+        document.documentElement.setAttribute("data-layout", DEFAULT_LAYOUT);
+      }
+    } catch {
+      document.documentElement.setAttribute("data-layout", DEFAULT_LAYOUT);
+    }
   }, []);
 
   const setTheme = (id: ThemeId) => {
@@ -72,8 +106,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setLayout = (id: LayoutId) => {
+    setLayoutState(id);
+    document.documentElement.setAttribute("data-layout", id);
+    try {
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, id);
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, layout, setLayout }}>
       {children}
     </ThemeContext.Provider>
   );

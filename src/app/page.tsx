@@ -42,7 +42,8 @@ import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
 import { SnippetsTab } from "@/components/tabs/SnippetsTab";
 import { usePiChat } from "@/hooks/usePiChat";
-import { useTheme, THEMES } from "@/components/ThemeProvider";
+import { useTheme, THEMES, LAYOUTS } from "@/components/ThemeProvider";
+import { CloudsLayout } from "@/components/CloudsLayout";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -53,7 +54,7 @@ export default function Home() {
   const { history, upsertEntry, removeEntry, updateEntryTitle } =
     useChatHistory();
 
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, layout, setLayout } = useTheme();
 
   /* ---- menu state ---- */
   const [menuOpen, setMenuOpen] = useState(false);
@@ -297,6 +298,51 @@ export default function Home() {
               <div className="flex-1 overflow-y-auto p-6">
                 {menuTab === "themes" && (
                   <div className="flex flex-col gap-6">
+                    {/* Layout switcher — Foundations (current) vs Clouds (bubbles) */}
+                    <section>
+                      <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
+                        <Palette className="w-3.5 h-3.5" />
+                        Layout
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {LAYOUTS.map((opt) => {
+                          const isActive = layout === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setLayout(opt.id)}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-sm text-left transition-colors ${
+                                isActive
+                                  ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
+                                  : "border-[var(--ch-border-subtle)] hover:border-[#FFB347]/40 hover:bg-white/[0.02]"
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${
+                                  isActive
+                                    ? "bg-[var(--ch-accent)]"
+                                    : "bg-[var(--ch-border)]"
+                                }`}
+                              />
+                              <span
+                                className={`text-[12px] font-mono ${
+                                  isActive
+                                    ? "text-[var(--ch-accent)]"
+                                    : "text-[var(--ch-text)]"
+                                }`}
+                              >
+                                {opt.label}
+                              </span>
+                              {isActive && (
+                                <Check className="w-3.5 h-3.5 text-[var(--ch-success)] ml-auto shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+
                     {/* Theme grid — dark left, light right */}
                     <div className="grid grid-cols-2 gap-4">
                       {(["dark", "light"] as const).map((mode) => (
@@ -706,6 +752,10 @@ export default function Home() {
         </>
       )}
 
+      {layout === "clouds" ? (
+        <CloudsLayout onOpenMenu={() => setMenuOpen(true)} />
+      ) : (
+      <>
       {/* ==================== LEFT COLUMN ==================== */}
       <div className="w-1/5 max-w-[240px] min-w-[200px] flex flex-col gap-2 h-full">
         <div
@@ -1254,6 +1304,8 @@ export default function Home() {
         <SearchTab />
       </div>
       {activeNavTab === "snippets" && <SnippetsTab />}
+      </>
+      )}
     </div>
   );
 }
