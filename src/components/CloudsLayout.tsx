@@ -104,7 +104,7 @@ export function CloudsLayout({
           {!hasLeft && <div aria-hidden className="min-w-0" />}
           <BubblePanel
             className="h-[min(92vh,980px)] max-h-[980px] rounded-[3.5rem]"
-            innerClassName="flex flex-col rounded-[2.75rem]"
+            innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
           >
             {main}
           </BubblePanel>
@@ -119,6 +119,12 @@ export function CloudsLayout({
           {!hasRight && <div aria-hidden className="min-w-0" />}
         </div>
       </div>
+
+      <style jsx global>{`
+        [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside)[class*="rounded-sm"] {
+          border-radius: 1.15rem !important;
+        }
+      `}</style>
     </div>
   );
 }
