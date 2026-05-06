@@ -93,6 +93,10 @@ frontend/
 - **Docs Area live AI** — gated on PI multiplex (Polish item F).
 - **Docs Area multi-doc** — currently single-doc, single localStorage key.
 
+## 2026-05-06 — Clouds layout shell
+
+Replaced the scaffolded Clouds placeholder with a floating cloud shell in `src/components/CloudsLayout.tsx` and routed active tab content from `src/app/page.tsx` into left/main/right slots. Clouds now uses a small rectangular Menu cloud plus a circular settings button; the Menu opens a floating nav cloud and the settings button opens the existing settings modal. Chat/plain uses main chat plus the existing metrics/history side cloud, coding/search/typing/snippets use the centered main cloud, and Docs Area uses shorter left/right clouds for Saves and AI Assist around the larger centered editor cloud. `src/components/tabs/WordTab.tsx` now supports optional portal targets for those Docs side clouds, and `src/components/LeftNav.tsx` can hide Docs sub-options in the Clouds menu while preserving Foundations unchanged. Notable: `npx.cmd tsc --noEmit` passed; focused ESLint passes for `CloudsLayout.tsx` and `LeftNav.tsx`, while broader focused lint still hits pre-existing `page.tsx` explicit-any and `WordTab` effect-rule debt.
+
 ## How to verify nothing is broken
 
 ```bash

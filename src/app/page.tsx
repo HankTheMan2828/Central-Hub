@@ -242,6 +242,413 @@ export default function Home() {
   const modelKey = (m: { provider: string; id: string }) =>
     `${m.provider}:${m.id}`;
 
+  const openSettingsMenu = useCallback(() => {
+    setMenuTab("settings");
+    setMenuOpen(true);
+  }, []);
+
+  const leftNavContent = (
+    <LeftNav
+      active={activeNavTab}
+      onSelect={setActiveNavTab}
+      chatSubTab={chatSubTab}
+      onChatSubSelect={setChatSubTab}
+      wordSubTab={wordSubTab}
+      onWordSubSelect={setWordSubTab}
+    />
+  );
+
+  const cloudsNavContent = (
+    <LeftNav
+      active={activeNavTab}
+      onSelect={setActiveNavTab}
+      chatSubTab={chatSubTab}
+      onChatSubSelect={setChatSubTab}
+      wordSubTab={wordSubTab}
+      onWordSubSelect={setWordSubTab}
+      showWordSubTabs={false}
+    />
+  );
+
+  const chatMainContent = (
+    <div className="h-full min-h-0 min-w-[400px] flex flex-col gap-2 p-3">
+      <ChatTabBar
+        tabs={tabs}
+        activeId={activeId}
+        onSelect={switchTab}
+        onAdd={addTab}
+        onRemove={removeTab}
+        canAdd={canAdd}
+      />
+      <div className="flex-1 min-h-0">
+        {tabs.map((tab) => (
+          <ChatPanel
+            key={tab.id}
+            tabId={tab.id}
+            isActive={tab.id === activeId}
+            onStartNew={() => {}}
+            onMetricsChange={handleMetricsChange}
+            onSaveHistory={handleSaveHistory}
+            resumeEntry={tab.id === activeId ? resumeEntry : null}
+            onResumeHandled={() => setResumeEntry(null)}
+            onTitleChange={updateTitle}
+            onHistoryTitleChange={updateEntryTitle}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  const chatRightContent = (
+    <div className="h-full min-h-0 p-4 overflow-y-auto flex flex-col gap-4">
+      <div>
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
+          <Cpu className="w-3.5 h-3.5" />
+          Model
+        </div>
+        <div className="relative">
+          <button
+            className="w-full flex items-center justify-between gap-2 border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-3 py-2 rounded-sm hover:bg-white/[0.04] text-left"
+            onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  activeMetrics?.isReady || sharedChat.isReady
+                    ? "bg-[var(--ch-success)]"
+                    : "bg-[var(--ch-text-faint)]"
+                }`}
+              />
+              <span className="text-[12px] truncate">
+                {activeMetrics?.currentModel
+                  ? activeMetrics.currentModel.name
+                  : sharedChat.currentModel
+                  ? sharedChat.currentModel.name
+                  : sharedChat.isReady
+                  ? "Select model..."
+                  : "No connection"}
+              </span>
+            </div>
+          </button>
+
+          {modelDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => {
+                  setModelDropdownOpen(false);
+                  setModelSearch("");
+                }}
+              />
+              <div className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[400px] overflow-hidden flex flex-col">
+                <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                    <input
+                      type="text"
+                      className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
+                      placeholder="Search models..."
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="overflow-y-auto max-h-[320px]">
+                  {sharedChat.filteredModels.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
+                      <span className="text-[11px] opacity-30">
+                        Loading models...
+                      </span>
+                    </div>
+                  ) : (
+                    (() => {
+                      const query = modelSearch.toLowerCase().trim();
+                      const filtered = query
+                        ? sharedChat.filteredModels.filter(
+                            (m) =>
+                              m.name.toLowerCase().includes(query) ||
+                              m.id.toLowerCase().includes(query) ||
+                              m.provider.toLowerCase().includes(query)
+                          )
+                        : sharedChat.filteredModels;
+
+                      return filtered.map((m) => {
+                        const key = modelKey(m);
+                        const isActive =
+                          sharedChat.currentModel?.provider === m.provider &&
+                          sharedChat.currentModel?.id === m.id;
+                        const isFav = sharedChat.favorites.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 group ${
+                              isActive ? "bg-white/[0.04]" : ""
+                            }`}
+                            onClick={() => handleSelectModel(m)}
+                          >
+                            <span
+                              className="shrink-0 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                sharedChat.toggleFavorite(key);
+                              }}
+                            >
+                              <Star
+                                className={`w-3 h-3 ${
+                                  isFav
+                                    ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
+                                    : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
+                                }`}
+                              />
+                            </span>
+                            <span className="truncate flex-1">{m.name}</span>
+                            {isActive && (
+                              <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                            )}
+                            <span
+                              className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                sharedChat.toggleBlock(key);
+                              }}
+                            >
+                              <Ban className="w-3 h-3 text-[var(--ch-error)]" />
+                            </span>
+                          </button>
+                        );
+                      });
+                    })()
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-wider mb-3 opacity-60">
+          Session Metrics
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] uppercase tracking-wider opacity-35">
+                Cost
+              </span>
+              <span className="text-[13px] font-mono font-bold text-[var(--ch-success)] tabular-nums">
+                $
+                {activeMetrics?.sessionStats
+                  ? activeMetrics.sessionStats.cost.toFixed(3)
+                  : "0.000"}
+              </span>
+            </div>
+          </div>
+          <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase tracking-wider opacity-35">
+                  Input Tokens
+                </span>
+                <span className="text-[11px] font-mono tabular-nums opacity-60">
+                  {activeMetrics?.sessionStats
+                    ? activeMetrics.sessionStats.tokens.input
+                    : 0}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase tracking-wider opacity-35">
+                  Output Tokens
+                </span>
+                <span className="text-[11px] font-mono tabular-nums opacity-60">
+                  {activeMetrics?.sessionStats
+                    ? activeMetrics.sessionStats.tokens.output
+                    : 0}
+                </span>
+              </div>
+              <div className="border-t border-[var(--ch-border-faint)] pt-1.5 mt-0.5 flex justify-between items-center">
+                <span className="text-[10px] uppercase tracking-wider opacity-35 font-bold">
+                  Total
+                </span>
+                <span className="text-[11px] font-mono tabular-nums opacity-70 font-bold">
+                  {activeMetrics?.sessionStats
+                    ? activeMetrics.sessionStats.tokens.total
+                    : 0}
+                </span>
+              </div>
+            </div>
+          </div>
+          {activeMetrics?.contextUsage &&
+            activeMetrics.contextUsage.contextWindow > 0 && (
+              <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase tracking-wider opacity-35">
+                      Context Usage
+                    </span>
+                    <span className="text-[11px] font-mono tabular-nums opacity-60">
+                      {activeMetrics.contextUsage.percent != null
+                        ? `${Math.round(activeMetrics.contextUsage.percent)}%`
+                        : "-"}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[var(--ch-bg-elevated)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${activeMetrics.contextUsage.percent ?? 0}%`,
+                        background:
+                          (activeMetrics.contextUsage.percent ?? 0) > 80
+                            ? "var(--ch-error)"
+                            : (activeMetrics.contextUsage.percent ?? 0) > 50
+                            ? "var(--ch-warning)"
+                            : "var(--ch-success)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-col min-h-0 flex-1">
+        <div className="flex items-center mb-2 shrink-0">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60">
+            <Clock className="w-3.5 h-3.5" />
+            History
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
+          {history.length === 0 && (
+            <p className="text-[11px] opacity-20 italic">No past chats yet.</p>
+          )}
+          {history.map((entry) => (
+            <div
+              key={entry.id}
+              className="w-full text-left px-2.5 py-2 border border-[var(--ch-border-subtle)] rounded-sm hover:bg-white/[0.04] hover:border-[var(--ch-border)] group"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-3 h-3 opacity-30 shrink-0" />
+                <span className="text-[11px] truncate flex-1">
+                  {entry.title}
+                </span>
+                {confirmHistoryDelete !== entry.id && (
+                  <button
+                    className="opacity-0 group-hover:opacity-40 hover:!opacity-80 hover:text-[var(--ch-error)] shrink-0"
+                    onClick={() => setConfirmHistoryDelete(entry.id)}
+                    title="Delete"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              {confirmHistoryDelete === entry.id && (
+                <div className="flex items-center gap-2 mt-1 ml-5">
+                  <span className="text-[9px] text-[var(--ch-error-text)]">
+                    Delete?
+                  </span>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm"
+                    onClick={() => {
+                      removeEntry(entry.id);
+                      setConfirmHistoryDelete(null);
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm"
+                    onClick={() => setConfirmHistoryDelete(null)}
+                  >
+                    No
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-between mt-1 ml-5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] opacity-25 font-mono">
+                    {new Date(entry.timestamp).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                  <span className="text-[9px] opacity-20">
+                    {entry.messageCount} msgs
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100">
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm"
+                    onClick={() => setHistoryPreview(entry)}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm"
+                    onClick={() => handleResumeHistory(entry)}
+                  >
+                    Resume
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const cloudsMainContent =
+    activeNavTab === "chat" && chatSubTab === "plain" ? (
+      chatMainContent
+    ) : activeNavTab === "chat" && chatSubTab === "coding" ? (
+      <div className="h-full min-h-0 flex gap-2 p-3">
+        <CodingAgentPanel theme="workbench" />
+      </div>
+    ) : activeNavTab === "word" ? (
+      <div className="h-full min-h-0 p-3 flex flex-col">
+        <WordTab
+          subTab={wordSubTab}
+          onSubTabChange={setWordSubTab}
+          aiPortalId="clouds-word-ai-slot"
+          savesPortalId="clouds-word-saves-slot"
+        />
+      </div>
+    ) : activeNavTab === "typing" ? (
+      <div className="h-full min-h-0 p-3 flex flex-col">
+        <TypingTab />
+      </div>
+    ) : activeNavTab === "search" ? (
+      <div className="h-full min-h-0 p-3 flex flex-col">
+        <SearchTab />
+      </div>
+    ) : (
+      <div className="h-full min-h-0 p-3 flex flex-col">
+        <SnippetsTab />
+      </div>
+    );
+
+  const cloudsRightContent =
+    activeNavTab === "chat" && chatSubTab === "plain" ? (
+      chatRightContent
+    ) : activeNavTab === "word" ? (
+      <div
+        id="clouds-word-ai-slot"
+        className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0"
+      />
+    ) : undefined;
+
+  const cloudsLeftContent =
+    activeNavTab === "word" ? (
+      <div
+        id="clouds-word-saves-slot"
+        className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0"
+      />
+    ) : undefined;
+
   /* ================================================================ */
   /*  Render                                                          */
   /* ================================================================ */
@@ -753,7 +1160,13 @@ export default function Home() {
       )}
 
       {layout === "clouds" ? (
-        <CloudsLayout onOpenMenu={() => setMenuOpen(true)} />
+        <CloudsLayout
+          nav={cloudsNavContent}
+          left={cloudsLeftContent}
+          main={cloudsMainContent}
+          right={cloudsRightContent}
+          onOpenMenu={openSettingsMenu}
+        />
       ) : (
       <>
       {/* ==================== LEFT COLUMN ==================== */}
