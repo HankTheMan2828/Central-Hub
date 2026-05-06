@@ -79,7 +79,7 @@ export function CloudsLayout({
         />
       )}
       <aside
-        className={`absolute left-5 top-[76px] z-30 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 shadow-2xl overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
+        className={`clouds-menu-bubble absolute left-5 top-[76px] z-30 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 shadow-2xl overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
           navOpen
             ? "max-h-[620px] opacity-100 scale-100 pointer-events-auto"
             : "max-h-0 opacity-0 scale-95 pointer-events-none"
@@ -126,6 +126,10 @@ export function CloudsLayout({
         }
 
         [data-layout="clouds"] .clouds-main-bubble .clouds-chat-tab-titles button {
+          border-radius: 1.15rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-menu-bubble :is(nav, div, button)[class*="rounded-sm"] {
           border-radius: 1.15rem !important;
         }
       `}</style>
