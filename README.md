@@ -1,79 +1,42 @@
-# Central Hub - AI Powered Operating System & Workspace
+# Central Hub
 
-Central Hub is a dark-mode first, unified desktop environment built to centralize daily workflows. It connects seamlessly to local and remote AI models (utilizing the Pi Coding Agent SDK) to power intelligent chat, coding workflows, text editing, and more.
+One desktop app for the things you actually do. Chat with AI, draft documents, run AI-assisted research, practice typing, and ship code with an autonomous coding agent. All in one window, themed how you like, updating itself in the background.
 
-## Download
+**[⬇ Download for Windows](https://github.com/HankTheMan2828/Central-Hub/releases/latest/download/CentralHub-Setup.exe)**
 
-**[⬇ Download Central Hub for Windows](https://github.com/HankTheMan2828/Central-Hub/releases/latest/download/CentralHub-Setup.exe)**
+Installs in seconds. Updates itself from this point on, no need to come back here.
 
-The link above always points to the latest version. After install, the app updates itself automatically — no need to come back here for new versions.
+> First run: Windows SmartScreen may show "Windows protected your PC" because the build isn't code-signed yet. Click **More info** then **Run anyway**. Only happens once.
 
-> **Heads up:** Because this build isn't yet code-signed, Windows SmartScreen may show a blue "Windows protected your PC" warning the first time you run the installer. Click **More info** → **Run anyway**. This only happens on first install.
+## What's inside
 
-## Architecture
-- **Framework:** Next.js 15 (React 19)
-- **Desktop Wrapper:** Electron
-- **Styling:** Tailwind CSS v4
-- **Icons:** Lucide React
-- **AI Engine:** PI Coding Agent SDK (in-process, no subprocess spawning)
+**AI Chat.** Talk to any model you've got an OpenRouter key for. Multi-tab, so five conversations stay alive at once without losing context. Powered by the Pi Coding Agent SDK running locally inside the app instead of bouncing through a remote service.
 
-> **🔥 PI INTEGRATION: READ THIS FIRST**
->
-> CentralHub embeds PI via the **SDK** (`createAgentSession()`), in-process
-> inside Electron's main process. The renderer never imports the SDK directly —
-> everything flows through Electron IPC.
->
-> **Full architecture doc:** [`PI_SDK_INTEGRATION.md`](./PI_SDK_INTEGRATION.md)
->
-> ❌ Do NOT spawn `pi` as a CLI subprocess.
-> ❌ Do NOT use RPC mode.
-> ❌ Do NOT import `@mariozechner/pi-coding-agent` in the renderer.
+**Document Editor.** A clean writing surface with an AI panel docked beside it. Highlight, ask, edit, save. No copy-pasting between tabs.
 
-## Getting Started
+**AI Search.** Headless browsing and summarization. Ask a question, get an answer with the legwork already done.
 
-### Development Mode (Local App)
-To run both the Next.js server and the native Desktop app simultaneously:
+**Typing Practice.** WPM tracking and keyboard training, in case you want to type faster between everything else.
+
+**Code Snippets.** Paste, save, reuse. Searchable.
+
+**Coding Agent.** An autonomous workspace for taking a project from prompt to working code. Workbench or terminal mode.
+
+## Make it yours
+
+Nine themes, dark and light, ranging from Midnight (pure black with orange accent) to Sunlit Canvas (warm light paper). Two layout modes too: **Foundations** for tight column-based minimalism, or **Clouds** if you want your panels to float as rounded bubbles in the middle of the screen. Switch either from the Themes menu in seconds.
+
+## Why it's different
+
+Most "AI desktop apps" are a chat window wrapped in Electron. Central Hub treats AI as a native feature across every module. The Pi SDK runs in-process, so prompts and tool calls happen at local speeds and your model stays under your control.
+
+It auto-updates. It survives its own edits via a hot-edit safety system. It's free.
+
+## Building or contributing
+
 ```bash
+npm install
 npm run app:dev
 ```
-*Note: We have included a VBScript `create-shortcut.js` that automatically generates a clickable desktop icon to launch this command seamlessly.*
 
-### Project Structure
-| File | Role |
-|------|------|
-| `main.js` | Electron main process. Owns PI SDK (AuthStorage, ModelRegistry, AgentSession). Exposes IPC handlers for the renderer. |
-| `src/hooks/usePiChat.ts` | React hook. Receives PI events via IPC, manages local chat state. |
-| `src/app/page.tsx` | The UI. Renders chat, settings, model selector. Calls `usePiChat()`. |
-| `PI_SDK_INTEGRATION.md` | **Complete PI integration reference.** Architecture, events, patterns, pitfalls. |
-
-## Planned Modules
-1. **Agent Chat:** Direct multi-turn interface for local/remote LLMs.
-2. **Docs Area:** Rich-text editor with AI inline assist.
-3. **Typing Practice:** Embedded WPM tracking and keyboard training.
-4. **AI Search:** Headless browsing and summarization agent.
-5. **Dev & Workflows:** Autonomous coding assistant interface.
-
-## Hot-Edit Safety System
-
-The app can modify its own source code at runtime without crashing, even when
-editing core files like `main.js`. This is protected by a 4-layer safety net:
-
-| Layer | Mechanism | File |
-|-------|-----------|------|
-| 1 | Git checkpoint on `ai-safety-rollbacks` branch | `.pi/extensions/hot-edit-guard.ts` |
-| 2 | Syntax validation (`node --check`) | `.pi/extensions/hot-edit-guard.ts` |
-| 3 | Guarded restart with external watchdog | `scripts/watchdog.js` |
-| 4 | Auto-rollback on crash | `scripts/watchdog.js` |
-
-**How it works:** When PI edits a critical file (`main.js`, `package.json`,
-or any `.pi/extensions/`), the extension creates a git safety checkpoint on
-a dedicated branch (not `main`), validates the syntax, then restarts the
-app with an external watchdog process. If the new process fails to start,
-the watchdog automatically rolls back and relaunches.
-
-**Manual commands:**
-- `/hot-edit:restart` — trigger a guarded restart
-- `/hot-edit:rollback` — roll back to the last safety checkpoint
-
-See [`PI_SDK_INTEGRATION.md`](./PI_SDK_INTEGRATION.md) for the complete
-architecture documentation.
+Architecture and rules for AI agents working on the codebase live in [`AGENTS.md`](./AGENTS.md), [`AI_EDITING_GUIDE.md`](./AI_EDITING_GUIDE.md), and [`PI_SDK_INTEGRATION.md`](./PI_SDK_INTEGRATION.md). Read those before touching `main.js`, the PI SDK wiring, or any extension.
