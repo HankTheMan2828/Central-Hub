@@ -337,9 +337,6 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
                             isActive ? "bg-white/[0.04] text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
                           }`}
                         >
-                          <span className="text-[8px] uppercase tracking-widest opacity-50 w-12 truncate shrink-0">
-                            {m.provider}
-                          </span>
                           <span className="flex-1 truncate">{m.name}</span>
                           {isActive && (
                             <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />

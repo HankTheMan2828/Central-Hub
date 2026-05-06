@@ -54,7 +54,13 @@ export function useChatTabs() {
 
   const removeTab = useCallback(
     (tabId: string) => {
-      if (tabs.length <= 1) return null;
+      if (tabs.length <= 1) {
+        const id = nextTabId();
+        const next = { id, num: 1, title: "Chat 1" };
+        setTabs([next]);
+        setActiveId(id);
+        return id;
+      }
       const idx = tabs.findIndex((t) => t.id === tabId);
       const remaining = renumber(tabs.filter((t) => t.id !== tabId));
       const newActiveId =

@@ -40,6 +40,196 @@ export interface CurrentModel {
   provider: string;
 }
 
+export type StoredModelPreference = {
+  provider: string;
+  id: string;
+};
+
+export const SELECTED_MODEL_KEY = "centralhub-selected-model";
+export const DEFAULT_MODEL_KEY = "centralhub-default-model";
+
+const MODEL_NAME_PREFIXES = [
+  "openrouter",
+  "anthropic",
+  "openai",
+  "google",
+  "meta",
+  "mistral",
+  "deepseek",
+  "qwen",
+  "alibaba",
+  "xai",
+  "x.ai",
+  "moonshot ai",
+  "z.ai",
+  "zai",
+  "cohere",
+  "perplexity",
+  "nous",
+  "nvidia",
+  "microsoft",
+  "amazon",
+  "ai21",
+  "liquid",
+  "minimax",
+  "reka",
+  "morph",
+  "inception",
+  "inflection",
+  "01.ai",
+  "01ai",
+];
+
+const MODEL_WORDS: Record<string, string> = {
+  ai: "AI",
+  gpt: "GPT",
+  glm: "GLM",
+  tts: "TTS",
+  stt: "STT",
+  gte: "GTE",
+  gteb: "GTEB",
+  ocr: "OCR",
+  r1: "R1",
+  v3: "V3",
+};
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function trimModelPrefixes(value: string, provider?: string) {
+  let name = value.trim();
+  const prefixes = [
+    provider,
+    ...MODEL_NAME_PREFIXES,
+  ].filter((prefix): prefix is string => !!prefix?.trim());
+
+  for (let i = 0; i < 4; i += 1) {
+    const before = name;
+    for (const prefix of prefixes) {
+      const pattern = new RegExp(
+        `^${escapeRegExp(prefix)}\\s*(?::|/|-\\s+)\\s*`,
+        "i"
+      );
+      name = name.replace(pattern, "").trim();
+    }
+    if (name === before) break;
+  }
+
+  return name;
+}
+
+function titleModelWord(word: string) {
+  const key = word.toLowerCase();
+  if (MODEL_WORDS[key]) return MODEL_WORDS[key];
+  if (/[A-Z]/.test(word.slice(1))) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function prettifyModelSlug(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.includes("-") && !trimmed.includes("_"))) {
+    return trimmed;
+  }
+
+  return trimmed
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map(titleModelWord)
+    .join(" ");
+}
+
+function cleanModelName(model: { id: string; name?: string; provider?: string }) {
+  const raw = (model.name || model.id || "").trim();
+  const source = raw || model.id;
+  let name = trimModelPrefixes(source, model.provider);
+
+  if (name.includes("/") && !name.includes(" / ")) {
+    name = trimModelPrefixes(name.split("/").pop() || name, model.provider);
+  }
+
+  name = name.replace(
+    new RegExp(
+      `\\s*\\((?:${MODEL_NAME_PREFIXES.map(escapeRegExp).join("|")})\\)\\s*$`,
+      "i"
+    ),
+    ""
+  );
+
+  return prettifyModelSlug(name) || source;
+}
+
+function normalizeModel(model: PiModel): PiModel {
+  return { ...model, name: cleanModelName(model) };
+}
+
+function normalizeCurrentModel(model: CurrentModel | null | undefined) {
+  return model ? { ...model, name: cleanModelName(model) } : null;
+}
+
+function normalizeModels(models: PiModel[] | null | undefined) {
+  return (models ?? []).map(normalizeModel);
+}
+
+function splitModelPreference(value: string): StoredModelPreference | null {
+  const [provider, ...idParts] = value.split(":");
+  const id = idParts.join(":");
+  if (!provider || !id) return null;
+  return { provider, id };
+}
+
+function parseModelPreference(raw: string | null): StoredModelPreference | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed?.provider === "string" &&
+      typeof parsed?.id === "string"
+    ) {
+      return { provider: parsed.provider, id: parsed.id };
+    }
+  } catch {}
+  return splitModelPreference(raw);
+}
+
+export function loadSelectedModelPreference() {
+  try {
+    return parseModelPreference(localStorage.getItem(SELECTED_MODEL_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function saveSelectedModelPreference(model: StoredModelPreference) {
+  try {
+    localStorage.setItem(SELECTED_MODEL_KEY, JSON.stringify(model));
+  } catch {}
+}
+
+export function loadDefaultModelPreference() {
+  try {
+    return parseModelPreference(localStorage.getItem(DEFAULT_MODEL_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function saveDefaultModelPreference(model: StoredModelPreference | null) {
+  try {
+    if (model) {
+      localStorage.setItem(DEFAULT_MODEL_KEY, JSON.stringify(model));
+    } else {
+      localStorage.removeItem(DEFAULT_MODEL_KEY);
+    }
+  } catch {}
+}
+
+function loadPreferredModelPreference() {
+  return loadDefaultModelPreference() ?? loadSelectedModelPreference();
+}
+
 export interface SlashCommand {
   name: string;
   description: string;
@@ -487,11 +677,40 @@ export function usePiChat(options?: UsePiChatOptions) {
     if (!ipc) return;
     try {
       const result = await ipc.invoke("pi:get-models");
-      setModels(result.models ?? []);
-      setCurrentModel(result.currentModel ?? null);
+      setModels(normalizeModels(result.models));
+      setCurrentModel(normalizeCurrentModel(result.currentModel));
       setAuthProviders(result.providers ?? {});
     } catch (_) {}
   }, []);
+
+  const applyPreferredModel = useCallback(
+    async (
+      ipc: NonNullable<ReturnType<typeof getIpc>>,
+      sid: string,
+      snap: PiSnapshotResult
+    ): Promise<PiSnapshotResult> => {
+      const preferred = loadPreferredModelPreference();
+      if (!preferred) return snap;
+
+      try {
+        const result = await ipc.invoke("pi:set-model", {
+          sessionId: sid,
+          provider: preferred.provider,
+          modelId: preferred.id,
+        });
+        if (result.success) return result;
+        console.warn(
+          "[usePiChat] preferred model could not be applied:",
+          result.error
+        );
+      } catch (e) {
+        console.warn("[usePiChat] preferred model could not be applied:", e);
+      }
+
+      return snap;
+    },
+    []
+  );
 
   const refreshSessionStats = useCallback(async () => {
     const ipc = getIpc();
@@ -666,8 +885,8 @@ export function usePiChat(options?: UsePiChatOptions) {
     if (!result.success)
       throw new Error(result.error ?? "Failed to set API key");
     setInitError(null);
-    setModels(result.models ?? []);
-    setCurrentModel(result.currentModel ?? null);
+    setModels(normalizeModels(result.models));
+    setCurrentModel(normalizeCurrentModel(result.currentModel));
     setAuthProviders(result.providers ?? {});
     return result;
   }, []);
@@ -682,6 +901,7 @@ export function usePiChat(options?: UsePiChatOptions) {
     });
     if (!result.success)
       throw new Error(result.error ?? "Failed to set model");
+    saveSelectedModelPreference({ provider, id: modelId });
     await refreshModels();
     return result;
   }, []);
@@ -693,13 +913,16 @@ export function usePiChat(options?: UsePiChatOptions) {
     try {
       const result = await ipc.invoke("pi:reinit");
       if (result.success) {
+        const snap = result.sessionId
+          ? await applyPreferredModel(ipc, result.sessionId, result)
+          : result;
         setIsReady(true);
         setInitError(null);
-        sessionIdRef.current = result.sessionId;
-        setSessionId(result.sessionId);
-        setModels(result.models ?? []);
-        setCurrentModel(result.currentModel ?? null);
-        setAuthProviders(result.providers ?? {});
+        sessionIdRef.current = snap.sessionId ?? result.sessionId;
+        setSessionId(snap.sessionId ?? result.sessionId);
+        setModels(normalizeModels(snap.models));
+        setCurrentModel(normalizeCurrentModel(snap.currentModel));
+        setAuthProviders(snap.providers ?? {});
       } else {
         setInitError(result.error || "Re-init failed. Check your API key.");
       }
@@ -708,7 +931,7 @@ export function usePiChat(options?: UsePiChatOptions) {
       setInitError(`Re-init failed: ${e.message ?? String(e)}`);
       return false;
     }
-  }, []);
+  }, [applyPreferredModel]);
 
   /* ---- restart: destroy the owned session and create a fresh one of
    *      the same type. Used by the "New" button so the AI doesn't see
@@ -737,16 +960,18 @@ export function usePiChat(options?: UsePiChatOptions) {
         return false;
       }
 
-      sessionIdRef.current = result.sessionId;
-      activeSessionRef.current = result.sessionId;
-      setSessionId(result.sessionId);
+      const snap = await applyPreferredModel(ipc, result.sessionId, result);
+
+      sessionIdRef.current = snap.sessionId ?? result.sessionId;
+      activeSessionRef.current = snap.sessionId ?? result.sessionId;
+      setSessionId(snap.sessionId ?? result.sessionId);
       setMessages([]);
       setIsStreaming(false);
       setSessionStats(null);
       setContextUsage(null);
-      if (Array.isArray(result.models)) setModels(result.models);
-      setCurrentModel(result.currentModel ?? null);
-      if (result.providers) setAuthProviders(result.providers);
+      if (Array.isArray(snap.models)) setModels(normalizeModels(snap.models));
+      setCurrentModel(normalizeCurrentModel(snap.currentModel));
+      if (snap.providers) setAuthProviders(snap.providers);
       setIsReady(true);
       setInitError(null);
       return true;
@@ -755,7 +980,7 @@ export function usePiChat(options?: UsePiChatOptions) {
       setInitError(`Restart failed: ${e?.message ?? String(e)}`);
       return false;
     }
-  }, [sessionType]);
+  }, [applyPreferredModel, sessionType]);
 
   /* ================================================================ */
   /*  Attachments                                                     */
@@ -970,10 +1195,14 @@ export function usePiChat(options?: UsePiChatOptions) {
           return;
         }
 
+        if (createdNew && sid) {
+          snap = await applyPreferredModel(ipc, sid, snap);
+        }
+
         setIsReady(true);
         setInitError(null);
-        setModels(snap.models ?? []);
-        setCurrentModel(snap.currentModel ?? null);
+        setModels(normalizeModels(snap.models));
+        setCurrentModel(normalizeCurrentModel(snap.currentModel));
         setAuthProviders(snap.providers ?? {});
       } catch (e: any) {
         if (!cancelled) setInitError(`PI init failed: ${e.message ?? String(e)}`);
@@ -1016,8 +1245,8 @@ export function usePiChat(options?: UsePiChatOptions) {
         setIsStreaming(false);
         setSessionStats(null);
         setContextUsage(null);
-        setModels(payload?.models ?? []);
-        setCurrentModel(payload?.currentModel ?? null);
+        setModels(normalizeModels(payload?.models));
+        setCurrentModel(normalizeCurrentModel(payload?.currentModel));
         setAuthProviders(payload?.providers ?? {});
 
         const channel =
@@ -1026,7 +1255,7 @@ export function usePiChat(options?: UsePiChatOptions) {
             : "pi:session-create";
 
         try {
-          const snap = (await ipc.invoke(channel)) as PiSnapshotResult;
+          let snap = (await ipc.invoke(channel)) as PiSnapshotResult;
           const newSid = snap.sessionId;
 
           if (cancelled) {
@@ -1043,13 +1272,17 @@ export function usePiChat(options?: UsePiChatOptions) {
             return;
           }
 
-          sessionIdRef.current = newSid;
-          activeSessionRef.current = newSid;
-          setSessionId(newSid);
+          snap = await applyPreferredModel(ipc, newSid, snap);
+
+          sessionIdRef.current = snap.sessionId ?? newSid;
+          activeSessionRef.current = snap.sessionId ?? newSid;
+          setSessionId(snap.sessionId ?? newSid);
           setIsReady(true);
           setInitError(null);
-          setModels(snap.models ?? payload?.models ?? []);
-          setCurrentModel(snap.currentModel ?? payload?.currentModel ?? null);
+          setModels(normalizeModels(snap.models ?? payload?.models));
+          setCurrentModel(
+            normalizeCurrentModel(snap.currentModel ?? payload?.currentModel)
+          );
           setAuthProviders(snap.providers ?? payload?.providers ?? {});
         } catch (e: unknown) {
           if (!cancelled) {
@@ -1100,6 +1333,7 @@ export function usePiChat(options?: UsePiChatOptions) {
     disabled,
     existingSessionId,
     sessionType,
+    applyPreferredModel,
     buildEventHandler,
     refreshCommands,
     refreshModels,

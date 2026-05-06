@@ -8,18 +8,22 @@ import {
   type CSSProperties,
   type FormEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Archive,
   Bot,
+  ChevronDown,
   Code2,
   FolderOpen,
   History,
   Loader2,
   MessageSquarePlus,
+  Search,
   Send,
   Square,
   Wrench,
+  X,
 } from "lucide-react";
 import { MarkdownContent } from "@/lib/markdown";
 import { usePiChat, type ChatMessage, type PiModel } from "@/hooks/usePiChat";
@@ -30,6 +34,17 @@ type SafetyLevel = "guarded" | "balanced" | "autonomous";
 
 type CodingAgentPanelProps = {
   theme: CodingAgentTheme;
+  infoPortalId?: string;
+  workspacesPortalId?: string;
+};
+
+type ComposerDropdownId = "workspace" | "model" | "effort" | "safety";
+
+type ComposerDropdownOption = {
+  value: string;
+  label: string;
+  searchText?: string;
+  disabled?: boolean;
 };
 
 export type WorkspaceOption = {
@@ -75,8 +90,63 @@ const ARCHIVED_WORKSPACES_KEY = "centralhub-coding-agent-archived-workspaces";
 const WORKSPACE_ORDER_KEY = "centralhub-coding-agent-workspace-order";
 const CHAT_RECORDS_KEY = "centralhub-coding-agent-chats";
 const MAX_CHAT_RECORDS = 18;
+const MAX_CODING_AGENT_TABS = 8;
 export const CODING_WORKSPACES_UPDATED_EVENT =
   "centralhub:coding-workspaces-updated";
+
+type CodingAgentTab = {
+  id: string;
+  title: string;
+  customTitle?: string;
+};
+
+type CodingAgentTabState = {
+  tabs: CodingAgentTab[];
+  activeId: string;
+};
+
+type CodingAgentTabPanelProps = CodingAgentPanelProps & {
+  agentTabs: CodingAgentTab[];
+  activeAgentTabId: string;
+  pendingAgentTabCloseId: string | null;
+  canAddAgentTab: boolean;
+  onAgentTabSelect: (tabId: string) => void;
+  onAgentTabAdd: () => void;
+  onAgentTabCloseRequest: (tabId: string) => void;
+  onAgentTabCloseConfirm: () => void;
+  onAgentTabCloseCancel: () => void;
+  onAgentTabTitleChange: (tabId: string, title: string) => void;
+};
+
+let codingAgentTabSeq = 1;
+
+function nextCodingAgentTabId() {
+  return `coding-tab-${codingAgentTabSeq++}`;
+}
+
+function makeCodingAgentTab(title = "Coding Workspace"): CodingAgentTab {
+  return {
+    id: nextCodingAgentTabId(),
+    title,
+  };
+}
+
+function renumberCodingAgentTabs(tabs: CodingAgentTab[]) {
+  return tabs.map((tab, index) => ({
+    ...tab,
+    title:
+      tab.customTitle ??
+      (index === 0 ? "Coding Workspace" : `Coding Workspace ${index + 1}`),
+  }));
+}
+
+function createCodingAgentTabState(): CodingAgentTabState {
+  const tab = makeCodingAgentTab();
+  return {
+    tabs: [tab],
+    activeId: tab.id,
+  };
+}
 
 const EFFORTS: { id: EffortLevel; label: string }[] = [
   { id: "minimal", label: "Minimal" },
@@ -139,7 +209,135 @@ function formatTokens(total?: number) {
 }
 
 function renderModelName(model: PiModel) {
-  return `${model.name} (${model.provider})`;
+  return model.name;
+}
+
+function ComposerDropdown({
+  id,
+  label,
+  valueLabel,
+  options,
+  openId,
+  disabled,
+  searchable,
+  searchPlaceholder,
+  onOpenChange,
+  onSelect,
+}: {
+  id: ComposerDropdownId;
+  label: string;
+  valueLabel: string;
+  options: ComposerDropdownOption[];
+  openId: ComposerDropdownId | null;
+  disabled?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  onOpenChange: (id: ComposerDropdownId | null) => void;
+  onSelect: (value: string) => void | Promise<void>;
+}) {
+  const isOpen = openId === id;
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const visibleOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!searchable || !q) return options;
+    return options.filter((option) =>
+      (option.searchText ?? option.label).toLowerCase().includes(q)
+    );
+  }, [options, query, searchable]);
+  const handleOpenChange = (nextId: ComposerDropdownId | null) => {
+    if (nextId !== id) setQuery("");
+    onOpenChange(nextId);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        dropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setQuery("");
+      onOpenChange(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [isOpen, onOpenChange]);
+
+  return (
+    <div ref={dropdownRef} className="relative flex flex-col gap-1 min-w-0">
+      <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
+        {label}
+      </span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => handleOpenChange(isOpen ? null : id)}
+        className="clouds-coding-dropdown-button h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-1.5"
+        title={valueLabel}
+      >
+        <span className="truncate">{valueLabel}</span>
+        <ChevronDown
+          className={`w-3 h-3 shrink-0 opacity-55 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {isOpen && (
+        <>
+          <div className="clouds-coding-dropdown-panel absolute left-0 top-full z-20 mt-1.5 min-w-full w-max max-w-[280px] max-h-[260px] overflow-hidden border border-[var(--agent-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl p-1 flex flex-col">
+            {searchable && (
+              <div className="relative mb-1 shrink-0">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                <input
+                  type="text"
+                  className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--agent-border)]"
+                  placeholder={searchPlaceholder ?? "Search..."}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.preventDefault();
+                  }}
+                  autoFocus
+                />
+              </div>
+            )}
+            <div className="overflow-y-auto min-h-0">
+              {visibleOptions.length === 0 ? (
+                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--ch-text-faint)] italic">
+                  No models found.
+                </div>
+              ) : (
+                visibleOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={option.disabled}
+                    onClick={() => {
+                      if (option.disabled) return;
+                      handleOpenChange(null);
+                      void onSelect(option.value);
+                    }}
+                    className="w-full max-w-[260px] text-left px-2.5 py-1.5 rounded-sm text-[11px] leading-snug text-[var(--ch-text)] hover:bg-[var(--agent-accent-soft)] disabled:opacity-45 disabled:cursor-not-allowed"
+                    title={option.label}
+                  >
+                    <span className="block truncate">{option.label}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function customWorkspaceId(path: string) {
@@ -392,7 +590,21 @@ function buildResumeContext(messages: ChatMessage[]) {
   return `--- Prior coding-agent conversation (resume context) ---\n${transcript}\n--- End prior coding-agent conversation ---\n\nContinue from where we left off. The user's next message follows.`;
 }
 
-export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
+function CodingAgentTabPanel({
+  theme,
+  infoPortalId,
+  workspacesPortalId,
+  agentTabs,
+  activeAgentTabId,
+  pendingAgentTabCloseId,
+  canAddAgentTab,
+  onAgentTabSelect,
+  onAgentTabAdd,
+  onAgentTabCloseRequest,
+  onAgentTabCloseConfirm,
+  onAgentTabCloseCancel,
+  onAgentTabTitleChange,
+}: CodingAgentTabPanelProps) {
   const chat = usePiChat();
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const activeChatIdRef = useRef<string | null>(null);
@@ -413,6 +625,13 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
   const [pendingNewChatGate, setPendingNewChatGate] = useState<string | null>(
     null
   );
+  const [infoPortalTarget, setInfoPortalTarget] = useState<HTMLElement | null>(
+    null
+  );
+  const [workspacesPortalTarget, setWorkspacesPortalTarget] =
+    useState<HTMLElement | null>(null);
+  const [openComposerMenu, setOpenComposerMenu] =
+    useState<ComposerDropdownId | null>(null);
   const [effort, setEffort] = useState<EffortLevel>("medium");
   const [safetyLevel, setSafetyLevel] = useState<SafetyLevel>("balanced");
   const [composerDocked, setComposerDocked] = useState(false);
@@ -437,6 +656,33 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
   const thinkingModels = useMemo(
     () => chat.filteredModels.filter((model) => model.reasoning),
     [chat.filteredModels]
+  );
+  const workspaceDropdownOptions = useMemo(
+    () =>
+      workspaceOptions.map((workspace) => ({
+        value: workspace.id,
+        label: workspace.name,
+      })),
+    [workspaceOptions]
+  );
+  const modelDropdownOptions = useMemo<ComposerDropdownOption[]>(
+    () =>
+      thinkingModels.length === 0
+        ? [{ value: "", label: "No thinking models", disabled: true }]
+        : thinkingModels.map((model) => ({
+            value: modelKey(model),
+            label: renderModelName(model),
+            searchText: `${model.name} ${model.id} ${model.provider}`,
+          })),
+    [thinkingModels]
+  );
+  const effortDropdownOptions = useMemo(
+    () => EFFORTS.map((item) => ({ value: item.id, label: item.label })),
+    []
+  );
+  const safetyDropdownOptions = useMemo(
+    () => SAFETY_LEVELS.map((item) => ({ value: item.id, label: item.label })),
+    []
   );
 
   const selectedThinkingModel = useMemo(() => {
@@ -508,6 +754,22 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
       prepareFolderInput(folderInputRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!infoPortalId) return;
+    const syncTarget = () =>
+      setInfoPortalTarget(document.getElementById(infoPortalId));
+    const frame = window.requestAnimationFrame(syncTarget);
+    return () => window.cancelAnimationFrame(frame);
+  }, [infoPortalId]);
+
+  useEffect(() => {
+    if (!workspacesPortalId) return;
+    const syncTarget = () =>
+      setWorkspacesPortalTarget(document.getElementById(workspacesPortalId));
+    const frame = window.requestAnimationFrame(syncTarget);
+    return () => window.cancelAnimationFrame(frame);
+  }, [workspacesPortalId]);
 
   useEffect(() => {
     const refreshWorkspaces = () => {
@@ -745,6 +1007,7 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
         const id = `coding-${now}-${Math.random().toString(36).slice(2, 7)}`;
         activeChatIdRef.current = id;
         setActiveChatId(id);
+        onAgentTabTitleChange(activeAgentTabId, title);
         nextRecords = [
           {
             id,
@@ -811,9 +1074,220 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
   };
 
   const composerIsFloating = !composerDocked && chat.messages.length === 0;
+  const usePortalRail = Boolean(infoPortalId || workspacesPortalId);
+
+  const infoPanel = (
+    <div
+      className="h-full min-h-0 text-[var(--ch-text-muted)] flex flex-col"
+      style={THEME_STYLES[theme]}
+    >
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3 shrink-0">
+        <Bot className="w-3.5 h-3.5" />
+        Info
+      </div>
+      <div className="flex-1 min-h-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm p-3 text-[11px] leading-relaxed overflow-hidden">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+          <div>
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Cost
+            </div>
+            <div className="font-mono tabular-nums">
+              ${(chat.sessionStats?.cost ?? 0).toFixed(3)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Tokens
+            </div>
+            <div className="font-mono tabular-nums">
+              {formatTokens(chat.sessionStats?.tokens.total)}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Model
+            </div>
+            <div className="font-mono truncate">
+              {selectedThinkingModel?.name ?? chat.currentModel?.name ?? "None"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Effort
+            </div>
+            <div className="font-mono truncate">
+              {selectedThinkingModel ? effort : "Required"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Safety
+            </div>
+            <div className="font-mono truncate">{selectedSafety.label}</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider opacity-45">
+              Runtime
+            </div>
+            <div className="font-mono truncate">PI SDK</div>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-[var(--ch-border-subtle)]">
+          {selectedSafety.prompt}
+        </div>
+      </div>
+    </div>
+  );
+
+  const workspacesPanel = (
+    <div
+      className="h-full min-h-0 flex flex-col"
+      style={THEME_STYLES[theme]}
+    >
+      <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60">
+          <FolderOpen className="w-3.5 h-3.5" />
+          Workspaces
+        </div>
+        <button
+          type="button"
+          onClick={handleChooseWorkspaceFolder}
+          className="h-[24px] px-2 flex items-center gap-1.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] hover:border-[var(--agent-border)] rounded-sm text-[10px] text-[var(--ch-text-muted)] hover:text-[var(--ch-text)] transition-colors"
+          title="Add workspace"
+        >
+          <FolderOpen className="w-3 h-3" />
+          Add workspace
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
+        {projectGroups.map((project) => (
+          <div
+            key={project.id}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={() => handleWorkspaceDrop(project.id)}
+            onDragEnd={() => setDraggedWorkspaceId(null)}
+            className={`border rounded-sm px-2.5 py-2 text-left transition-colors ${
+              project.id === workspaceId
+                ? "border-[var(--agent-border)] bg-[var(--agent-accent-soft)]"
+                : "border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)]"
+            } ${project.id === draggedWorkspaceId ? "opacity-45" : ""}`}
+          >
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                draggable
+                onDragStart={(event) => {
+                  setDraggedWorkspaceId(project.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", project.id);
+                }}
+                className="mt-0.5 h-[20px] w-[18px] flex flex-col items-center justify-center gap-1 text-[var(--ch-text-faint)] hover:text-[var(--ch-text)] cursor-grab active:cursor-grabbing shrink-0"
+                title="Drag to reorder workspace"
+              >
+                <span className="block h-px w-3 bg-current" />
+                <span className="block h-px w-3 bg-current" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleWorkspaceChange(project.id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-mono text-[var(--ch-text)] truncate">
+                    {project.name}
+                  </span>
+                  <span className="text-[10px] font-mono text-[var(--ch-text-muted)] tabular-nums">
+                    {project.chats.length}
+                  </span>
+                </div>
+                <span className="block mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
+                  {project.path || "No folder selected"}
+                </span>
+              </button>
+              {customWorkspaces.some((workspace) => workspace.id === project.id) && (
+                <button
+                  type="button"
+                  onClick={() => handleArchiveWorkspace(project)}
+                  className="h-[24px] w-[24px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] rounded-sm transition-colors shrink-0"
+                  title={`Archive ${project.name}`}
+                >
+                  <Archive className="w-3 h-3" />
+                </button>
+              )}
+              {pendingNewChatGate !== `workspace:${project.id}` && (
+                <button
+                  type="button"
+                  onClick={() => requestNewChat(`workspace:${project.id}`)}
+                  className="h-[24px] w-[24px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] rounded-sm transition-colors shrink-0"
+                  title={`New chat in ${project.name}`}
+                >
+                  <MessageSquarePlus className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {pendingNewChatGate === `workspace:${project.id}` && (
+              <div className="mt-2 flex items-center gap-1.5 text-[10px]">
+                <span className="text-[var(--ch-error-text)]">New chat?</span>
+                <button
+                  type="button"
+                  onClick={() => confirmNewChat(project.id)}
+                  className="px-1.5 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm uppercase tracking-wider transition-colors"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelNewChat}
+                  className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
+                >
+                  No
+                </button>
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-col gap-1.5">
+              {project.chats.length === 0 ? (
+                <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)] rounded-sm px-2 py-1.5 text-[10px] leading-relaxed text-[var(--ch-text-muted)]">
+                  No chats yet.
+                </div>
+              ) : (
+                project.chats.map((record) => (
+                  <button
+                    key={record.id}
+                    type="button"
+                    onClick={() => {
+                      void handleSelectChatRecord(record);
+                    }}
+                    className={`border rounded-sm px-2 py-1.5 text-left transition-colors ${
+                      record.id === activeChatId
+                        ? "border-[var(--agent-border)] bg-[var(--agent-accent-soft)]"
+                        : "border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)] hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 text-[11px] text-[var(--ch-text)] truncate">
+                      <History className="w-3 h-3 shrink-0 opacity-45" />
+                      <span className="truncate">{record.title}</span>
+                    </span>
+                    <span className="block mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
+                      {formatChatTime(record.updatedAt)}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="contents" style={THEME_STYLES[theme]}>
+    <>
+      <div className="contents" style={THEME_STYLES[theme]}>
       <div className="flex-1 min-h-0 min-w-[400px] flex flex-col gap-2">
         <div className="flex items-center shrink-0 gap-0">
           <input
@@ -823,37 +1297,78 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
             className="hidden"
             onChange={(event) => handleFolderInputChange(event.target.files)}
           />
-          <button
-            type="button"
-            className="h-[28px] px-3 text-[11px] font-medium transition-colors flex items-center gap-2 border border-[var(--agent-border)] bg-[var(--agent-accent-soft)] text-[var(--agent-accent)]"
-            title="Coding Workspace"
-          >
-            <Code2 className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[140px]">Coding Workspace</span>
-          </button>
-          {pendingNewChatGate === "top" ? (
-            <div className="h-[28px] px-2 flex items-center gap-1.5 border border-[var(--ch-border)] text-[10px]">
-              <span className="text-[var(--ch-error-text)]">Confirm?</span>
-              <button
-                type="button"
-                onClick={() => confirmNewChat()}
-                className="px-1.5 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm uppercase tracking-wider transition-colors"
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={cancelNewChat}
-                className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
-              >
-                No
-              </button>
-            </div>
-          ) : (
+          {agentTabs.map((agentTab) => {
+            const isActiveAgentTab = agentTab.id === activeAgentTabId;
+            const isConfirmingClose =
+              pendingAgentTabCloseId === agentTab.id;
+            const isOnlyAgentTab = agentTabs.length <= 1;
+
+            return (
+              <div key={agentTab.id} className="relative flex">
+                <button
+                  type="button"
+                  className={`h-[28px] px-3 text-[11px] font-medium transition-colors flex items-center gap-2 border rounded-sm ${
+                    isActiveAgentTab
+                      ? "border-[var(--agent-border)] bg-[var(--agent-accent-soft)] text-[var(--agent-accent)]"
+                      : "border-[var(--ch-border)] bg-[var(--ch-bg-base)] text-[var(--ch-text-faint)] hover:text-[var(--ch-text-muted)] hover:bg-[var(--ch-bg-hover)]"
+                  }`}
+                  onClick={() => onAgentTabSelect(agentTab.id)}
+                  title={agentTab.title}
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  <span className="truncate max-w-[140px]">
+                    {agentTab.title}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full w-3.5 h-3.5 flex items-center justify-center text-[10px] leading-none transition-colors ${
+                      isConfirmingClose
+                        ? "bg-[var(--ch-error-bg)] text-[var(--ch-error)]"
+                        : "text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] hover:bg-[var(--ch-error-bg)]"
+                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAgentTabCloseRequest(agentTab.id);
+                    }}
+                    title={
+                      isOnlyAgentTab ? "Start new chat" : "Close chat"
+                    }
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </span>
+                </button>
+
+                {isConfirmingClose && (
+                  <div className="absolute top-full left-0 mt-1 z-50 border border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] rounded-sm shadow-lg px-2.5 py-2 flex items-center gap-2 whitespace-nowrap">
+                    <AlertTriangle className="w-3 h-3 text-[var(--ch-error)] shrink-0" />
+                    <span className="text-[11px] text-[var(--ch-error-text)]">
+                      {isOnlyAgentTab
+                        ? "Start new chat?"
+                        : `Close ${agentTab.title}?`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onAgentTabCloseConfirm}
+                      className="px-2 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-error-bg)] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onAgentTabCloseCancel}
+                      className="px-2 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {canAddAgentTab && (
             <button
               type="button"
-                onClick={() => requestNewChat("top")}
-              className="h-[28px] px-2.5 flex items-center gap-1.5 border border-[var(--ch-border)] text-[var(--ch-text-faint)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] transition-colors shrink-0"
+              onClick={onAgentTabAdd}
+              className="h-[28px] px-2.5 flex items-center gap-1.5 border border-[var(--ch-border)] text-[var(--ch-text-faint)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] rounded-sm transition-colors shrink-0"
               title="New chat"
             >
               <MessageSquarePlus className="w-3.5 h-3.5" />
@@ -862,8 +1377,8 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
           )}
         </div>
 
-        <div className="flex-1 min-h-0 border border-[var(--agent-border)] rounded-sm overflow-hidden bg-[var(--ch-bg-base)] flex flex-col relative">
-          <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)]">
+        <div className="clouds-coding-chat-shell flex-1 min-h-0 border border-[var(--agent-border)] rounded-sm overflow-hidden bg-[var(--ch-bg-base)] flex flex-col relative">
+          <div className="clouds-coding-chat-header shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)]">
             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--agent-accent)]">
               Coding Agent
             </span>
@@ -965,89 +1480,62 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
 
           <form
             onSubmit={handleSubmit}
-            className={`absolute border border-[var(--agent-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl p-3 flex flex-col gap-2 transition-[top,bottom,left,right,width,transform] duration-500 ease-out ${
+            className={`clouds-coding-composer absolute border border-[var(--agent-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl p-3 flex flex-col gap-2 transition-[top,bottom,left,right,width,transform] duration-500 ease-out ${
               composerIsFloating
-                ? "top-1/2 bottom-auto left-1/2 right-auto w-1/2 -translate-x-1/2 -translate-y-1/2"
+                ? "top-1/2 bottom-auto left-1/2 right-auto w-[56%] -translate-x-1/2 -translate-y-1/2"
                 : "top-auto bottom-3 left-3 right-3 w-auto translate-x-0 translate-y-0"
             }`}
           >
             <div className="grid grid-cols-4 gap-2">
-              <label className="flex flex-col gap-1 min-w-0">
-                <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
-                  Workspace
-                </span>
-                <select
-                  className="h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)]"
-                  value={workspaceId}
-                  onChange={(event) => handleWorkspaceChange(event.target.value)}
-                >
-                  {workspaceOptions.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ComposerDropdown
+                id="workspace"
+                label="Workspace"
+                valueLabel={selectedWorkspace.name}
+                options={workspaceDropdownOptions}
+                openId={openComposerMenu}
+                onOpenChange={setOpenComposerMenu}
+                onSelect={handleWorkspaceChange}
+              />
 
-              <label className="flex flex-col gap-1 min-w-0">
-                <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
-                  Model
-                </span>
-                <select
-                  className="h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)]"
-                  value={selectedThinkingModel ? modelKey(selectedThinkingModel) : ""}
-                  onChange={(event) => handleModelChange(event.target.value)}
-                  disabled={!chat.isReady || thinkingModels.length === 0}
-                >
-                  <option value="">
-                    {thinkingModels.length === 0
-                      ? "No thinking models"
-                      : "Select thinking model"}
-                  </option>
-                  {thinkingModels.map((model) => (
-                    <option key={modelKey(model)} value={modelKey(model)}>
-                      {renderModelName(model)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ComposerDropdown
+                id="model"
+                label="Model"
+                valueLabel={
+                  selectedThinkingModel
+                    ? renderModelName(selectedThinkingModel)
+                    : thinkingModels.length === 0
+                    ? "No thinking models"
+                    : "Select thinking model"
+                }
+                options={modelDropdownOptions}
+                openId={openComposerMenu}
+                disabled={!chat.isReady || thinkingModels.length === 0}
+                searchable
+                searchPlaceholder="Search models..."
+                onOpenChange={setOpenComposerMenu}
+                onSelect={handleModelChange}
+              />
 
-              <label className="flex flex-col gap-1 min-w-0">
-                <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
-                  Effort
-                </span>
-                <select
-                  className="h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)]"
-                  value={effort}
-                  onChange={(event) => setEffort(event.target.value as EffortLevel)}
-                  disabled={!selectedThinkingModel}
-                >
-                  {EFFORTS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ComposerDropdown
+                id="effort"
+                label="Effort"
+                valueLabel={EFFORTS.find((item) => item.id === effort)?.label ?? effort}
+                options={effortDropdownOptions}
+                openId={openComposerMenu}
+                disabled={!selectedThinkingModel}
+                onOpenChange={setOpenComposerMenu}
+                onSelect={(value) => setEffort(value as EffortLevel)}
+              />
 
-              <label className="flex flex-col gap-1 min-w-0">
-                <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
-                  Safety
-                </span>
-                <select
-                  className="h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)]"
-                  value={safetyLevel}
-                  onChange={(event) =>
-                    setSafetyLevel(event.target.value as SafetyLevel)
-                  }
-                >
-                  {SAFETY_LEVELS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ComposerDropdown
+                id="safety"
+                label="Safety"
+                valueLabel={selectedSafety.label}
+                options={safetyDropdownOptions}
+                openId={openComposerMenu}
+                onOpenChange={setOpenComposerMenu}
+                onSelect={(value) => setSafetyLevel(value as SafetyLevel)}
+              />
             </div>
 
             {needsThinkingModel && (
@@ -1126,208 +1614,118 @@ export function CodingAgentPanel({ theme }: CodingAgentPanelProps) {
         </div>
       </div>
 
-      <aside className="w-1/4 max-w-[300px] min-w-[200px] h-full border border-[var(--agent-border)] p-3 overflow-y-auto flex flex-col gap-3 rounded-sm bg-[var(--agent-accent-soft)]">
-        <div className="text-[var(--ch-text-muted)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
-            <Bot className="w-3.5 h-3.5" />
-            Info
-          </div>
-          <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm p-3 text-[11px] leading-relaxed">
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-              <div>
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Cost
-                </div>
-                <div className="font-mono tabular-nums">
-                  ${(chat.sessionStats?.cost ?? 0).toFixed(3)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Tokens
-                </div>
-                <div className="font-mono tabular-nums">
-                  {formatTokens(chat.sessionStats?.tokens.total)}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Model
-                </div>
-                <div className="font-mono truncate">
-                  {selectedThinkingModel?.name ?? chat.currentModel?.name ?? "None"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Effort
-                </div>
-                <div className="font-mono truncate">
-                  {selectedThinkingModel ? effort : "Required"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Safety
-                </div>
-                <div className="font-mono truncate">
-                  {selectedSafety.label}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider opacity-45">
-                  Runtime
-                </div>
-                <div className="font-mono truncate">PI SDK</div>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-[var(--ch-border-subtle)]">
-              {selectedSafety.prompt}
-            </div>
-          </div>
-        </div>
+      {!usePortalRail && (
+        <aside className="w-1/4 max-w-[300px] min-w-[200px] h-full border border-[var(--agent-border)] p-3 overflow-hidden flex flex-col gap-3 rounded-sm bg-[var(--agent-accent-soft)]">
+          <div className="shrink-0">{infoPanel}</div>
+          <div className="flex-1 min-h-0">{workspacesPanel}</div>
+        </aside>
+      )}
+      </div>
+      {infoPortalId && infoPortalTarget
+        ? createPortal(infoPanel, infoPortalTarget)
+        : null}
+      {workspacesPortalId && workspacesPortalTarget
+        ? createPortal(workspacesPanel, workspacesPortalTarget)
+        : null}
+    </>
+  );
+}
 
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60">
-              <FolderOpen className="w-3.5 h-3.5" />
-              Workspaces
-            </div>
-            <button
-              type="button"
-              onClick={handleChooseWorkspaceFolder}
-              className="h-[24px] px-2 flex items-center gap-1.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] hover:border-[var(--agent-border)] rounded-sm text-[10px] text-[var(--ch-text-muted)] hover:text-[var(--ch-text)] transition-colors"
-              title="Add workspace"
-            >
-              <FolderOpen className="w-3 h-3" />
-              Add workspace
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {projectGroups.map((project) => (
-              <div
-                key={project.id}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={() => handleWorkspaceDrop(project.id)}
-                onDragEnd={() => setDraggedWorkspaceId(null)}
-                className={`border rounded-sm px-2.5 py-2 text-left transition-colors ${
-                  project.id === workspaceId
-                    ? "border-[var(--agent-border)] bg-[var(--agent-accent-soft)]"
-                    : "border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)]"
-                } ${project.id === draggedWorkspaceId ? "opacity-45" : ""}`}
-              >
-                <div className="flex items-start gap-2">
-                  <button
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      setDraggedWorkspaceId(project.id);
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", project.id);
-                    }}
-                    className="mt-0.5 h-[20px] w-[18px] flex flex-col items-center justify-center gap-1 text-[var(--ch-text-faint)] hover:text-[var(--ch-text)] cursor-grab active:cursor-grabbing shrink-0"
-                    title="Drag to reorder workspace"
-                  >
-                    <span className="block h-px w-3 bg-current" />
-                    <span className="block h-px w-3 bg-current" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleWorkspaceChange(project.id)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[12px] font-mono text-[var(--ch-text)] truncate">
-                        {project.name}
-                      </span>
-                      <span className="text-[10px] font-mono text-[var(--ch-text-muted)] tabular-nums">
-                        {project.chats.length}
-                      </span>
-                    </div>
-                    <span className="block mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
-                      {project.path || "No folder selected"}
-                    </span>
-                  </button>
-                  {customWorkspaces.some((workspace) => workspace.id === project.id) && (
-                    <button
-                      type="button"
-                      onClick={() => handleArchiveWorkspace(project)}
-                      className="h-[24px] w-[24px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] rounded-sm transition-colors shrink-0"
-                      title={`Archive ${project.name}`}
-                    >
-                      <Archive className="w-3 h-3" />
-                    </button>
-                  )}
-                  {pendingNewChatGate !== `workspace:${project.id}` && (
-                    <button
-                      type="button"
-                      onClick={() => requestNewChat(`workspace:${project.id}`)}
-                      className="h-[24px] w-[24px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--agent-accent)] hover:border-[var(--agent-border)] rounded-sm transition-colors shrink-0"
-                      title={`New chat in ${project.name}`}
-                    >
-                      <MessageSquarePlus className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
+export function CodingAgentPanel({
+  theme,
+  infoPortalId,
+  workspacesPortalId,
+}: CodingAgentPanelProps) {
+  const [tabState, setTabState] = useState<CodingAgentTabState>(
+    createCodingAgentTabState
+  );
+  const [pendingTabCloseId, setPendingTabCloseId] = useState<string | null>(
+    null
+  );
 
-                {pendingNewChatGate === `workspace:${project.id}` && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[10px]">
-                    <span className="text-[var(--ch-error-text)]">New chat?</span>
-                    <button
-                      type="button"
-                      onClick={() => confirmNewChat(project.id)}
-                      className="px-1.5 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm uppercase tracking-wider transition-colors"
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelNewChat}
-                      className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
-                    >
-                      No
-                    </button>
-                  </div>
-                )}
+  const handleSelectTab = (tabId: string) => {
+    setPendingTabCloseId(null);
+    setTabState((prev) => ({ ...prev, activeId: tabId }));
+  };
 
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {project.chats.length === 0 ? (
-                    <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)] rounded-sm px-2 py-1.5 text-[10px] leading-relaxed text-[var(--ch-text-muted)]">
-                      No chats yet.
-                    </div>
-                  ) : (
-                    project.chats.map((record) => (
-                      <button
-                        key={record.id}
-                        type="button"
-                        onClick={() => {
-                          void handleSelectChatRecord(record);
-                        }}
-                        className={`border rounded-sm px-2 py-1.5 text-left transition-colors ${
-                          record.id === activeChatId
-                            ? "border-[var(--agent-border)] bg-[var(--agent-accent-soft)]"
-                            : "border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)] hover:bg-white/[0.04]"
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5 text-[11px] text-[var(--ch-text)] truncate">
-                          <History className="w-3 h-3 shrink-0 opacity-45" />
-                          <span className="truncate">{record.title}</span>
-                        </span>
-                        <span className="block mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
-                          {formatChatTime(record.updatedAt)}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            ))}
+  const handleAddTab = () => {
+    setPendingTabCloseId(null);
+    setTabState((prev) => {
+      if (prev.tabs.length >= MAX_CODING_AGENT_TABS) return prev;
+      const nextTab = makeCodingAgentTab(
+        `Coding Workspace ${prev.tabs.length + 1}`
+      );
+      return {
+        tabs: renumberCodingAgentTabs([...prev.tabs, nextTab]),
+        activeId: nextTab.id,
+      };
+    });
+  };
+
+  const handleCloseConfirm = () => {
+    const tabId = pendingTabCloseId;
+    if (!tabId) return;
+
+    setPendingTabCloseId(null);
+    setTabState((prev) => {
+      if (prev.tabs.length <= 1) {
+        return createCodingAgentTabState();
+      }
+
+      const tabIndex = prev.tabs.findIndex((tab) => tab.id === tabId);
+      const remaining = renumberCodingAgentTabs(
+        prev.tabs.filter((tab) => tab.id !== tabId)
+      );
+      const activeId =
+        tabId === prev.activeId
+          ? remaining[Math.min(Math.max(tabIndex, 0), remaining.length - 1)].id
+          : prev.activeId;
+
+      return {
+        tabs: remaining,
+        activeId,
+      };
+    });
+  };
+
+  const handleTitleChange = (tabId: string, title: string) => {
+    setTabState((prev) => ({
+      ...prev,
+      tabs: prev.tabs.map((tab) =>
+        tab.id === tabId ? { ...tab, title, customTitle: title } : tab
+      ),
+    }));
+  };
+
+  return (
+    <>
+      {tabState.tabs.map((tab) => {
+        const isActive = tab.id === tabState.activeId;
+        return (
+          <div
+            key={tab.id}
+            style={{ display: isActive ? "contents" : "none" }}
+          >
+            <CodingAgentTabPanel
+              theme={theme}
+              infoPortalId={isActive ? infoPortalId : undefined}
+              workspacesPortalId={isActive ? workspacesPortalId : undefined}
+              agentTabs={tabState.tabs}
+              activeAgentTabId={tabState.activeId}
+              pendingAgentTabCloseId={pendingTabCloseId}
+              canAddAgentTab={
+                tabState.tabs.length < MAX_CODING_AGENT_TABS
+              }
+              onAgentTabSelect={handleSelectTab}
+              onAgentTabAdd={handleAddTab}
+              onAgentTabCloseRequest={setPendingTabCloseId}
+              onAgentTabCloseConfirm={handleCloseConfirm}
+              onAgentTabCloseCancel={() => setPendingTabCloseId(null)}
+              onAgentTabTitleChange={handleTitleChange}
+            />
           </div>
-        </div>
-      </aside>
-    </div>
+        );
+      })}
+    </>
   );
 }
