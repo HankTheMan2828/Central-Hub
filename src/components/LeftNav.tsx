@@ -61,6 +61,7 @@ interface LeftNavProps {
   onChatSubSelect: (id: ChatSubTabId) => void;
   wordSubTab: WordSubTabId;
   onWordSubSelect: (id: WordSubTabId) => void;
+  showWordSubTabs?: boolean;
 }
 
 export function LeftNav({
@@ -70,6 +71,7 @@ export function LeftNav({
   onChatSubSelect,
   wordSubTab,
   onWordSubSelect,
+  showWordSubTabs = true,
 }: LeftNavProps) {
   return (
     <nav
@@ -83,7 +85,11 @@ export function LeftNav({
         {TABS.map((tab, idx) => {
           const Icon = tab.icon;
           const isActive = tab.id === active;
-          const showSubs = isActive && tab.subTabs && tab.subTabs.length > 0;
+          const showSubs =
+            isActive &&
+            tab.subTabs &&
+            tab.subTabs.length > 0 &&
+            (tab.id !== "word" || showWordSubTabs);
           return (
             <li key={tab.id}>
               <button

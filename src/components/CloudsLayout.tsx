@@ -1,57 +1,138 @@
 "use client";
 
-/* ------------------------------------------------------------------ */
-/*  Clouds layout (placeholder)                                        */
-/*                                                                     */
-/*  This is a SCAFFOLD only — the real Clouds shell is to be filled    */
-/*  in by Codex per the brief in HANDOFF.md / the PR description.      */
-/*                                                                     */
-/*  Intended final shape:                                              */
-/*    - Page background visible around all UI                          */
-/*    - Small rounded "menu" bubble in the top-left opens the LeftNav  */
-/*      as a slide-in drawer overlay (with settings access).           */
-/*    - Three rounded-3xl bubble columns floating in the middle:       */
-/*        left side column · main bubble (largest) · right side column */
-/*        (smaller). Each tab declares which side columns it shows —   */
-/*        left, right, both, or neither — and unused columns are       */
-/*        hidden so the main bubble fills the freed space.             */
-/*    - No animations.                                                 */
-/*                                                                     */
-/*  All themes (`var(--ch-*)` tokens) must continue to apply.          */
-/* ------------------------------------------------------------------ */
-
-import { Menu } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Menu, Settings } from "lucide-react";
 
 interface CloudsLayoutProps {
-  /** Open the existing settings/menu overlay (themes, settings, archive). */
+  left?: ReactNode;
+  main: ReactNode;
+  right?: ReactNode;
+  nav: ReactNode;
   onOpenMenu: () => void;
 }
 
-export function CloudsLayout({ onOpenMenu }: CloudsLayoutProps) {
+function BubblePanel({
+  children,
+  className = "",
+  innerClassName = "",
+}: {
+  children: ReactNode;
+  className?: string;
+  innerClassName?: string;
+}) {
   return (
-    <div className="fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag">
-      {/* Menu trigger bubble — top-left */}
-      <button
-        type="button"
-        onClick={onOpenMenu}
-        className="absolute top-4 left-4 z-10 px-3 py-2 rounded-2xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] transition-colors flex items-center gap-2 select-none"
+    <section
+      className={`min-h-0 min-w-0 rounded-[3rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] shadow-2xl overflow-hidden p-4 ${className}`}
+    >
+      <div
+        className={`h-full min-h-0 min-w-0 overflow-hidden rounded-[2.35rem] ${innerClassName}`}
       >
-        <Menu className="w-4 h-4" />
-        <span className="text-[10px] font-bold tracking-widest uppercase">
-          Menu
-        </span>
-      </button>
+        {children}
+      </div>
+    </section>
+  );
+}
 
-      {/* Placeholder centerpiece — Codex replaces this with the real bubbles */}
-      <div className="absolute inset-0 flex items-center justify-center p-12 pointer-events-none">
-        <div className="rounded-3xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-8 py-6 text-center max-w-md">
-          <div className="text-[14px] font-bold mb-2">Clouds layout</div>
-          <div className="text-[12px] text-[var(--ch-text-muted)] leading-relaxed">
-            Scaffolded placeholder. The real layout — left side column, main
-            bubble, smaller right side column — will live here.
-          </div>
+export function CloudsLayout({
+  left,
+  main,
+  right,
+  nav,
+  onOpenMenu,
+}: CloudsLayoutProps) {
+  const [navOpen, setNavOpen] = useState(false);
+  const hasLeft = Boolean(left);
+  const hasRight = Boolean(right);
+
+  const gridTemplateColumns = useMemo(() => {
+    const side = hasLeft || hasRight ? "minmax(300px, 0.58fr)" : "minmax(0, 1fr)";
+    return `${side} minmax(980px, 1120px) ${side}`;
+  }, [hasLeft, hasRight]);
+
+  return (
+    <div className="fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden">
+      <div className="absolute top-5 left-5 z-30 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setNavOpen((open) => !open)}
+          className="h-11 min-w-[112px] px-4 rounded-2xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center gap-2 select-none shadow-xl"
+        >
+          <Menu className="w-4 h-4" />
+          <span className="text-[10px] font-bold tracking-widest uppercase">
+            Menu
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          className="h-11 w-11 rounded-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center justify-center shadow-xl"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      </div>
+
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-20"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside
+        className={`clouds-menu-bubble absolute left-5 top-[76px] z-30 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 shadow-2xl overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
+          navOpen
+            ? "max-h-[620px] opacity-100 scale-100 pointer-events-auto"
+            : "max-h-0 opacity-0 scale-95 pointer-events-none"
+        }`}
+      >
+        <div className="min-h-0 flex flex-col">{nav}</div>
+      </aside>
+
+      <div className="h-full w-full px-8 pb-10 pt-20 flex items-center justify-center">
+        <div
+          className="grid w-full max-w-[1840px] items-center gap-9 min-h-0"
+          style={{ gridTemplateColumns }}
+        >
+          {hasLeft && (
+            <BubblePanel
+              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              innerClassName="rounded-[1.85rem]"
+            >
+              {left}
+            </BubblePanel>
+          )}
+          {!hasLeft && <div aria-hidden className="min-w-0" />}
+          <BubblePanel
+            className="h-[min(92vh,980px)] max-h-[980px] rounded-[3.5rem]"
+            innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
+          >
+            {main}
+          </BubblePanel>
+          {hasRight && (
+            <BubblePanel
+              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              innerClassName="rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
+            >
+              {right}
+            </BubblePanel>
+          )}
+          {!hasRight && <div aria-hidden className="min-w-0" />}
         </div>
       </div>
+
+      <style jsx global>{`
+        [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside)[class*="rounded-sm"] {
+          border-radius: 1.15rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-chat-tab-titles button {
+          border-radius: 1.15rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-menu-bubble :is(nav, div, button)[class*="rounded-sm"] {
+          border-radius: 1.15rem !important;
+        }
+      `}</style>
     </div>
   );
 }

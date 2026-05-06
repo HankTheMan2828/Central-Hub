@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { WordSubTabId } from "../LeftNav";
 import { EditorView } from "./wordtab/EditorView";
 import { SavesView } from "./wordtab/SavesView";
@@ -83,9 +84,16 @@ function htmlToPlainText(html: string): string {
 type Props = {
   subTab: WordSubTabId;
   onSubTabChange: (id: WordSubTabId) => void;
+  aiPortalId?: string;
+  savesPortalId?: string;
 };
 
-export function WordTab({ subTab, onSubTabChange }: Props) {
+export function WordTab({
+  subTab,
+  onSubTabChange,
+  aiPortalId,
+  savesPortalId,
+}: Props) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -107,6 +115,10 @@ export function WordTab({ subTab, onSubTabChange }: Props) {
   const [pendingOpen, setPendingOpen] = useState<
     { id: string; title: string; hadMessages: boolean } | null
   >(null);
+  const [aiPortalTarget, setAiPortalTarget] = useState<HTMLElement | null>(null);
+  const [savesPortalTarget, setSavesPortalTarget] = useState<HTMLElement | null>(
+    null
+  );
   const hydratedDocRef = useRef<string | null>(null);
 
   const commitStore = useCallback((next: DocStoreState) => {
@@ -231,6 +243,25 @@ export function WordTab({ subTab, onSubTabChange }: Props) {
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!aiPortalId) {
+      return;
+    }
+    const syncTarget = () => setAiPortalTarget(document.getElementById(aiPortalId));
+    const frame = window.requestAnimationFrame(syncTarget);
+    return () => window.cancelAnimationFrame(frame);
+  }, [aiPortalId]);
+
+  useEffect(() => {
+    if (!savesPortalId) {
+      return;
+    }
+    const syncTarget = () =>
+      setSavesPortalTarget(document.getElementById(savesPortalId));
+    const frame = window.requestAnimationFrame(syncTarget);
+    return () => window.cancelAnimationFrame(frame);
+  }, [savesPortalId]);
 
   // Keep "Saved Xm ago" fresh.
   useEffect(() => {
@@ -481,6 +512,20 @@ export function WordTab({ subTab, onSubTabChange }: Props) {
     [flushSave, title]
   );
 
+  const aiPanel = (
+    <AIPanel ref={aiPanelRef} getEditor={getEditor} onApplyDoc={handleApplyDoc} />
+  );
+  const savesView = (
+    <SavesView
+      docs={docs}
+      activeId={store.activeId}
+      onOpen={handleOpen}
+      onNew={handleNew}
+      onDelete={handleDelete}
+      onDuplicate={handleDuplicate}
+    />
+  );
+
   return (
     <>
       <div className="flex-1 min-h-0 min-w-0 flex flex-col">
@@ -504,20 +549,20 @@ export function WordTab({ subTab, onSubTabChange }: Props) {
           pageColorId={pageColorId}
           onPageColorChange={handlePageColorChange}
           exec={exec}
-          hidden={subTab !== "editor"}
+          hidden={!savesPortalId && subTab !== "editor"}
         />
-        {subTab === "saves" && (
-          <SavesView
-            docs={docs}
-            activeId={store.activeId}
-            onOpen={handleOpen}
-            onNew={handleNew}
-            onDelete={handleDelete}
-            onDuplicate={handleDuplicate}
-          />
-        )}
+        {!savesPortalId && subTab === "saves" && savesView}
       </div>
-      <AIPanel ref={aiPanelRef} getEditor={getEditor} onApplyDoc={handleApplyDoc} />
+      {savesPortalId
+        ? savesPortalTarget
+          ? createPortal(savesView, savesPortalTarget)
+          : null
+        : null}
+      {aiPortalId
+        ? aiPortalTarget
+          ? createPortal(aiPanel, aiPortalTarget)
+          : null
+        : aiPanel}
       {pendingOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
