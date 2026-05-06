@@ -272,14 +272,16 @@ export default function Home() {
 
   const chatMainContent = (
     <div className="h-full min-h-0 min-w-[400px] box-border flex flex-col gap-2 p-3">
-      <ChatTabBar
-        tabs={tabs}
-        activeId={activeId}
-        onSelect={switchTab}
-        onAdd={addTab}
-        onRemove={removeTab}
-        canAdd={canAdd}
-      />
+      <div className="clouds-chat-tab-titles shrink-0">
+        <ChatTabBar
+          tabs={tabs}
+          activeId={activeId}
+          onSelect={switchTab}
+          onAdd={addTab}
+          onRemove={removeTab}
+          canAdd={canAdd}
+        />
+      </div>
       <div className="flex-1 min-h-0">
         {tabs.map((tab) => (
           <ChatPanel

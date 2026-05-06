@@ -124,6 +124,10 @@ export function CloudsLayout({
         [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside)[class*="rounded-sm"] {
           border-radius: 1.15rem !important;
         }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-chat-tab-titles button {
+          border-radius: 1.15rem !important;
+        }
       `}</style>
     </div>
   );
