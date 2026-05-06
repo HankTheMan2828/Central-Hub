@@ -41,7 +41,12 @@ import { WordTab } from "@/components/tabs/WordTab";
 import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
 import { SnippetsTab } from "@/components/tabs/SnippetsTab";
-import { usePiChat } from "@/hooks/usePiChat";
+import {
+  loadDefaultModelPreference,
+  saveDefaultModelPreference,
+  usePiChat,
+  type StoredModelPreference,
+} from "@/hooks/usePiChat";
 import { useTheme, THEMES, LAYOUTS } from "@/components/ThemeProvider";
 import { CloudsLayout } from "@/components/CloudsLayout";
 
@@ -60,7 +65,8 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuTab, setMenuTab] = useState<"themes" | "settings" | "archive">("themes");
   const [agentSpace, setAgentSpace] = useState<"workbench" | "terminal">("workbench");
-  const [defaultModel, setDefaultModel] = useState<{ provider: string; id: string } | null>(null);
+  const [defaultModel, setDefaultModel] =
+    useState<StoredModelPreference | null>(() => loadDefaultModelPreference());
   const [archivedWorkspaces, setArchivedWorkspaces] =
     useState<WorkspaceOption[]>(loadArchivedWorkspaces);
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState<string | null>(
@@ -76,6 +82,8 @@ export default function Home() {
   /* ---- model selector state ---- */
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [defaultModelDropdownOpen, setDefaultModelDropdownOpen] = useState(false);
+  const [defaultModelSearch, setDefaultModelSearch] = useState("");
 
   /* ---- Brave Search state ---- */
   const [braveKey, setBraveKey] = useState("");
@@ -93,7 +101,9 @@ export default function Home() {
   // We need a shared chat reference for the settings panel (model selector, API keys)
   // The first tab's chat instance serves as the "global" reference for settings.
   // Model changes broadcast to all sessions via pi:broadcast-model.
-  const sharedChat = usePiChat({ disabled: chatSubTab !== "plain" });
+  const sharedChat = usePiChat({
+    disabled: chatSubTab !== "plain" && !(menuOpen && menuTab === "settings"),
+  });
 
   /* ---- Metrics from the active chat tab (for right column) ---- */
   const [activeMetrics, setActiveMetrics] = useState<ChatPanelMetrics | null>(null);
@@ -242,6 +252,21 @@ export default function Home() {
   const modelKey = (m: { provider: string; id: string }) =>
     `${m.provider}:${m.id}`;
 
+  const defaultModelName = defaultModel
+    ? sharedChat.models.find((m) => modelKey(m) === modelKey(defaultModel))?.name ??
+      defaultModel.id
+    : "Use last selected model";
+
+  const handleDefaultModelChange = useCallback(
+    (nextModel: StoredModelPreference | null) => {
+      setDefaultModel(nextModel);
+      saveDefaultModelPreference(nextModel);
+      setDefaultModelDropdownOpen(false);
+      setDefaultModelSearch("");
+    },
+    []
+  );
+
   const openSettingsMenu = useCallback(() => {
     setMenuTab("settings");
     setMenuOpen(true);
@@ -302,7 +327,7 @@ export default function Home() {
   );
 
   const chatRightContent = (
-    <div className="h-full min-h-0 box-border overflow-y-auto flex flex-col gap-4 p-3">
+    <div className="clouds-chat-right-rail h-full min-h-0 box-border overflow-y-auto flex flex-col gap-4 p-3">
       <div>
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
           <Cpu className="w-3.5 h-3.5" />
@@ -435,7 +460,7 @@ export default function Home() {
           Session Metrics
         </div>
         <div className="flex flex-col gap-2">
-          <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+          <div className="clouds-metric-card border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
             <div className="flex justify-between items-center">
               <span className="text-[10px] uppercase tracking-wider opacity-35">
                 Cost
@@ -448,7 +473,7 @@ export default function Home() {
               </span>
             </div>
           </div>
-          <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+          <div className="clouds-metric-card border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] uppercase tracking-wider opacity-35">
@@ -484,7 +509,7 @@ export default function Home() {
           </div>
           {activeMetrics?.contextUsage &&
             activeMetrics.contextUsage.contextWindow > 0 && (
-              <div className="border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+              <div className="clouds-metric-card border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
                 <div className="flex flex-col gap-1.5">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] uppercase tracking-wider opacity-35">
@@ -523,14 +548,14 @@ export default function Home() {
             History
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
+        <div className="clouds-history-list flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
           {history.length === 0 && (
             <p className="text-[11px] opacity-20 italic">No past chats yet.</p>
           )}
           {history.map((entry) => (
             <div
               key={entry.id}
-              className="w-full text-left px-2.5 py-2 border border-[var(--ch-border-subtle)] rounded-sm hover:bg-white/[0.04] hover:border-[var(--ch-border)] group"
+              className="clouds-history-card w-full text-left px-2.5 py-2 border border-[var(--ch-border-subtle)] rounded-sm hover:bg-white/[0.04] hover:border-[var(--ch-border)] group"
             >
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-3 h-3 opacity-30 shrink-0" />
@@ -608,7 +633,11 @@ export default function Home() {
       chatMainContent
     ) : activeNavTab === "chat" && chatSubTab === "coding" ? (
       <div className="h-full min-h-0 box-border flex gap-2 p-3">
-        <CodingAgentPanel theme="workbench" />
+        <CodingAgentPanel
+          theme="workbench"
+          infoPortalId="clouds-coding-info-slot"
+          workspacesPortalId="clouds-coding-workspaces-slot"
+        />
       </div>
     ) : activeNavTab === "word" ? (
       <div className="h-full min-h-0 box-border flex flex-col p-3">
@@ -640,6 +669,22 @@ export default function Home() {
       <div
         id="clouds-word-ai-slot"
         className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
+      />
+    ) : undefined;
+
+  const cloudsRightStackTop =
+    activeNavTab === "chat" && chatSubTab === "coding" ? (
+      <div
+        id="clouds-coding-info-slot"
+        className="h-full min-h-0 box-border p-3"
+      />
+    ) : undefined;
+
+  const cloudsRightStackBottom =
+    activeNavTab === "chat" && chatSubTab === "coding" ? (
+      <div
+        id="clouds-coding-workspaces-slot"
+        className="h-full min-h-0 box-border p-3"
       />
     ) : undefined;
 
@@ -848,26 +893,122 @@ export default function Home() {
                         Default Model
                       </h3>
                       <div className="flex flex-col gap-2">
-                        <select
-                          value={defaultModel ? `${defaultModel.provider}:${defaultModel.id}` : ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) {
-                              setDefaultModel(null);
-                            } else {
-                              const [provider, ...rest] = val.split(":");
-                              setDefaultModel({ provider, id: rest.join(":") });
+                        <div className="relative">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between gap-2 bg-[var(--ch-bg-elevated)] border border-[var(--ch-border)] text-[12px] px-3 py-2 rounded-sm outline-none hover:bg-white/[0.04] focus:border-[var(--ch-text-faint)] transition-colors text-left"
+                            onClick={() =>
+                              setDefaultModelDropdownOpen(
+                                !defaultModelDropdownOpen
+                              )
                             }
-                          }}
-                          className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border)] text-[12px] px-3 py-2 rounded-sm outline-none focus:border-[var(--ch-text-faint)] transition-colors"
-                        >
-                          <option value="">Use last selected model</option>
-                          {sharedChat.filteredModels.map((m) => (
-                            <option key={`${m.provider}:${m.id}`} value={`${m.provider}:${m.id}`}>
-                              {m.provider}/{m.name}
-                            </option>
-                          ))}
-                        </select>
+                          >
+                            <span className="truncate">{defaultModelName}</span>
+                          </button>
+
+                          {defaultModelDropdownOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-30"
+                                onClick={() => {
+                                  setDefaultModelDropdownOpen(false);
+                                  setDefaultModelSearch("");
+                                }}
+                              />
+                              <div className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[340px] overflow-hidden flex flex-col">
+                                <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
+                                  <div className="relative">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                                    <input
+                                      type="text"
+                                      className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
+                                      placeholder="Search models..."
+                                      value={defaultModelSearch}
+                                      onChange={(e) =>
+                                        setDefaultModelSearch(e.target.value)
+                                      }
+                                      autoFocus
+                                    />
+                                  </div>
+                                </div>
+                                <div className="overflow-y-auto max-h-[280px]">
+                                  <button
+                                    type="button"
+                                    className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
+                                      !defaultModel ? "bg-white/[0.04]" : ""
+                                    }`}
+                                    onClick={() => handleDefaultModelChange(null)}
+                                  >
+                                    <span className="truncate flex-1">
+                                      Use last selected model
+                                    </span>
+                                    {!defaultModel && (
+                                      <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                    )}
+                                  </button>
+                                  {sharedChat.filteredModels.length === 0 ? (
+                                    <div className="px-3 py-4 text-center">
+                                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
+                                      <span className="text-[11px] opacity-30">
+                                        Loading models...
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    (() => {
+                                      const query = defaultModelSearch
+                                        .toLowerCase()
+                                        .trim();
+                                      const filtered = query
+                                        ? sharedChat.filteredModels.filter(
+                                            (m) =>
+                                              m.name
+                                                .toLowerCase()
+                                                .includes(query) ||
+                                              m.id
+                                                .toLowerCase()
+                                                .includes(query) ||
+                                              m.provider
+                                                .toLowerCase()
+                                                .includes(query)
+                                          )
+                                        : sharedChat.filteredModels;
+
+                                      return filtered.map((m) => {
+                                        const key = modelKey(m);
+                                        const isActive =
+                                          defaultModel?.provider ===
+                                            m.provider &&
+                                          defaultModel?.id === m.id;
+                                        return (
+                                          <button
+                                            key={key}
+                                            type="button"
+                                            className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
+                                              isActive ? "bg-white/[0.04]" : ""
+                                            }`}
+                                            onClick={() =>
+                                              handleDefaultModelChange({
+                                                provider: m.provider,
+                                                id: m.id,
+                                              })
+                                            }
+                                          >
+                                            <span className="truncate flex-1">
+                                              {m.name}
+                                            </span>
+                                            {isActive && (
+                                              <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                            )}
+                                          </button>
+                                        );
+                                      });
+                                    })()
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 py-1.5">
                           <span
                             className={`w-2 h-2 rounded-full ${
@@ -1050,9 +1191,7 @@ export default function Home() {
                             const model = sharedChat.models.find(
                               (m) => `${m.provider}:${m.id}` === key
                             );
-                            const name = model
-                              ? `${model.provider}/${model.name}`
-                              : key;
+                            const name = model ? model.name : key;
                             return (
                               <div
                                 key={key}
@@ -1167,6 +1306,8 @@ export default function Home() {
           left={cloudsLeftContent}
           main={cloudsMainContent}
           right={cloudsRightContent}
+          rightStackTop={cloudsRightStackTop}
+          rightStackBottom={cloudsRightStackBottom}
           onOpenMenu={openSettingsMenu}
         />
       ) : (
@@ -1320,77 +1461,55 @@ export default function Home() {
                                   )
                                 : sharedChat.filteredModels;
 
-                              const grouped: Record<
-                                string,
-                                typeof filtered
-                              > = {};
-                              for (const m of filtered) {
-                                if (!grouped[m.provider])
-                                  grouped[m.provider] = [];
-                                grouped[m.provider].push(m);
-                              }
-                              return Object.entries(grouped).map(
-                                ([provider, providerModels]) => (
-                                  <div key={provider}>
-                                    <div className="px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] opacity-25 bg-white/[0.01]">
-                                      {provider}
-                                    </div>
-                                    {providerModels.map((m) => {
-                                      const key = modelKey(m);
-                                      const isActive =
-                                        sharedChat.currentModel
-                                          ?.provider === m.provider &&
-                                        sharedChat.currentModel?.id === m.id;
-                                      const isFav =
-                                        sharedChat.favorites.includes(key);
-                                      return (
-                                        <button
-                                          key={key}
-                                          className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] transition-colors flex items-center gap-1.5 group ${
-                                            isActive
-                                              ? "bg-white/[0.04]"
-                                              : ""
-                                          }`}
-                                          onClick={() =>
-                                            handleSelectModel(m)
-                                          }
-                                        >
-                                          <span
-                                            className="shrink-0 cursor-pointer"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              sharedChat.toggleFavorite(key);
-                                            }}
-                                          >
-                                            <Star
-                                              className={`w-3 h-3 transition-colors ${
-                                                isFav
-                                                  ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
-                                                  : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
-                                              }`}
-                                            />
-                                          </span>
-                                          <span className="truncate flex-1">
-                                            {m.name}
-                                          </span>
-                                          {isActive && (
-                                            <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                                          )}
-                                          <span
-                                            className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer transition-opacity"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              sharedChat.toggleBlock(key);
-                                            }}
-                                          >
-                                            <Ban className="w-3 h-3 text-[var(--ch-error)]" />
-                                          </span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )
-                              );
+                              return filtered.map((m) => {
+                                const key = modelKey(m);
+                                const isActive =
+                                  sharedChat.currentModel
+                                    ?.provider === m.provider &&
+                                  sharedChat.currentModel?.id === m.id;
+                                const isFav =
+                                  sharedChat.favorites.includes(key);
+                                return (
+                                  <button
+                                    key={key}
+                                    className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] transition-colors flex items-center gap-1.5 group ${
+                                      isActive ? "bg-white/[0.04]" : ""
+                                    }`}
+                                    onClick={() => handleSelectModel(m)}
+                                  >
+                                    <span
+                                      className="shrink-0 cursor-pointer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        sharedChat.toggleFavorite(key);
+                                      }}
+                                    >
+                                      <Star
+                                        className={`w-3 h-3 transition-colors ${
+                                          isFav
+                                            ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
+                                            : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
+                                        }`}
+                                      />
+                                    </span>
+                                    <span className="truncate flex-1">
+                                      {m.name}
+                                    </span>
+                                    {isActive && (
+                                      <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                    )}
+                                    <span
+                                      className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer transition-opacity"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        sharedChat.toggleBlock(key);
+                                      }}
+                                    >
+                                      <Ban className="w-3 h-3 text-[var(--ch-error)]" />
+                                    </span>
+                                  </button>
+                                );
+                              });
                             })()}
                           </>
                         )}

@@ -938,10 +938,10 @@ function ToolbarBtn({
       title={title}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`w-7 h-7 flex items-center justify-center border rounded-sm transition-colors ${
+      className={`w-7 h-7 flex items-center justify-center border transition-colors ${
         active
-          ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-          : "border-transparent hover:border-[#FFB347]/40 hover:bg-[var(--ch-accent-5)] text-[var(--ch-text-muted)] hover:text-[var(--ch-accent)]"
+          ? "rounded-full border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+          : "rounded-sm border-transparent hover:border-[#FFB347]/40 hover:bg-[var(--ch-accent-5)] text-[var(--ch-text-muted)] hover:text-[var(--ch-accent)]"
       }`}
     >
       {children}

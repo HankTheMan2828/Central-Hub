@@ -7,6 +7,8 @@ interface CloudsLayoutProps {
   left?: ReactNode;
   main: ReactNode;
   right?: ReactNode;
+  rightStackTop?: ReactNode;
+  rightStackBottom?: ReactNode;
   nav: ReactNode;
   onOpenMenu: () => void;
 }
@@ -37,12 +39,15 @@ export function CloudsLayout({
   left,
   main,
   right,
+  rightStackTop,
+  rightStackBottom,
   nav,
   onOpenMenu,
 }: CloudsLayoutProps) {
   const [navOpen, setNavOpen] = useState(false);
   const hasLeft = Boolean(left);
-  const hasRight = Boolean(right);
+  const hasRightStack = Boolean(rightStackTop || rightStackBottom);
+  const hasRight = Boolean(right || hasRightStack);
 
   const gridTemplateColumns = useMemo(() => {
     const side = hasLeft || hasRight ? "minmax(300px, 0.58fr)" : "minmax(0, 1fr)";
@@ -96,7 +101,7 @@ export function CloudsLayout({
           {hasLeft && (
             <BubblePanel
               className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
-              innerClassName="rounded-[1.85rem]"
+              innerClassName="clouds-side-bubble rounded-[1.85rem]"
             >
               {left}
             </BubblePanel>
@@ -108,29 +113,215 @@ export function CloudsLayout({
           >
             {main}
           </BubblePanel>
-          {hasRight && (
+          {hasRightStack ? (
+            <div className="h-[min(92vh,980px)] max-h-[980px] min-h-0 min-w-0 self-center flex flex-col gap-7">
+              {rightStackTop && (
+                <BubblePanel
+                  className="h-[min(34vh,360px)] min-h-[310px] rounded-[2.35rem] p-3"
+                  innerClassName="clouds-side-bubble clouds-side-bubble-square rounded-[1.6rem]"
+                >
+                  {rightStackTop}
+                </BubblePanel>
+              )}
+              {rightStackBottom && (
+                <BubblePanel
+                  className="flex-1 rounded-[2.65rem] p-3"
+                  innerClassName="clouds-side-bubble clouds-side-bubble-stack rounded-[1.9rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
+                >
+                  {rightStackBottom}
+                </BubblePanel>
+              )}
+            </div>
+          ) : hasRight ? (
             <BubblePanel
               className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
-              innerClassName="rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
+              innerClassName="clouds-side-bubble rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
             >
               {right}
             </BubblePanel>
-          )}
+          ) : null}
           {!hasRight && <div aria-hidden className="min-w-0" />}
         </div>
       </div>
 
       <style jsx global>{`
-        [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside)[class*="rounded-sm"] {
-          border-radius: 1.15rem !important;
+        [data-layout="clouds"] {
+          --clouds-main-child-radius: 1.45rem;
+          --clouds-side-child-radius: 1.25rem;
+          --clouds-menu-child-radius: 1.15rem;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside, button, input, textarea, select)[class*="rounded-sm"] {
+          border-radius: var(--clouds-main-child-radius) !important;
         }
 
         [data-layout="clouds"] .clouds-main-bubble .clouds-chat-tab-titles button {
+          border-radius: 999px !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-chat-shell {
+          border-radius: 1.85rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-chat-header {
+          border-top-left-radius: 1.85rem !important;
+          border-top-right-radius: 1.85rem !important;
+          padding-left: 1.2rem !important;
+          padding-right: 1.2rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-composer {
+          border-radius: 1.35rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-composer select {
+          border-radius: 999px !important;
+          padding-left: 0.85rem !important;
+          padding-right: 1.85rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-dropdown-button {
+          border-radius: 999px !important;
+          padding-left: 0.85rem !important;
+          padding-right: 0.65rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-dropdown-panel {
           border-radius: 1.15rem !important;
+          padding: 0.35rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-main-bubble .clouds-coding-dropdown-panel button {
+          border-radius: 0.85rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-side-bubble :is(div, section, aside, button, input, textarea, select)[class*="rounded-sm"] {
+          border-radius: var(--clouds-side-child-radius) !important;
+        }
+
+        [data-layout="clouds"] .clouds-side-bubble-square {
+          --clouds-side-child-radius: 1.35rem;
+        }
+
+        [data-layout="clouds"] .clouds-side-bubble-stack {
+          --clouds-side-child-radius: 1.2rem;
         }
 
         [data-layout="clouds"] .clouds-menu-bubble :is(nav, div, button)[class*="rounded-sm"] {
-          border-radius: 1.15rem !important;
+          border-radius: var(--clouds-menu-child-radius) !important;
+        }
+
+        [data-layout="clouds"] :is(.clouds-main-bubble, .clouds-side-bubble) ::-webkit-scrollbar {
+          width: 14px;
+          height: 14px;
+        }
+
+        [data-layout="clouds"] :is(.clouds-main-bubble, .clouds-side-bubble) ::-webkit-scrollbar-track {
+          background: transparent;
+          border: 0;
+        }
+
+        [data-layout="clouds"] :is(.clouds-main-bubble, .clouds-side-bubble) ::-webkit-scrollbar-thumb {
+          background-color: var(--ch-border);
+          background-clip: content-box;
+          border: 4px solid transparent;
+          border-radius: 999px;
+        }
+
+        [data-layout="clouds"] .clouds-side-bubble .overflow-y-auto {
+          padding-right: 0.45rem !important;
+          scrollbar-gutter: stable;
+        }
+
+        [data-layout="clouds"] .clouds-chat-header {
+          min-height: 3.1rem;
+          padding: 0.95rem 1.35rem 0.7rem !important;
+          align-items: center;
+        }
+
+        [data-layout="clouds"] .clouds-section-title {
+          display: inline-flex;
+          align-items: center;
+          line-height: 1;
+        }
+
+        [data-layout="clouds"] .clouds-chat-scroll {
+          padding: 1.35rem 1.5rem 1.5rem !important;
+          gap: 0.85rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-empty {
+          padding: 2rem;
+          text-align: center;
+        }
+
+        [data-layout="clouds"] .clouds-chat-empty-icon {
+          margin-bottom: 0.15rem;
+        }
+
+        [data-layout="clouds"] .clouds-chat-empty-text {
+          max-width: 24rem;
+          line-height: 1.45;
+        }
+
+        [data-layout="clouds"] .clouds-chat-message-bubble {
+          padding: 0.85rem 1.1rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-composer {
+          padding: 1rem 1.15rem 0.95rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-input {
+          min-height: 4.6rem !important;
+          padding: 0.1rem 0.25rem 0.65rem !important;
+          line-height: 1.55;
+        }
+
+        [data-layout="clouds"] .clouds-chat-toolbar {
+          align-items: center !important;
+          margin-top: 0.45rem !important;
+          padding-top: 0.75rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-icon-button {
+          width: 2.15rem !important;
+          height: 2.15rem !important;
+          padding: 0 !important;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-icon-button svg {
+          width: 1rem;
+          height: 1rem;
+        }
+
+        [data-layout="clouds"] .clouds-chat-send-button {
+          min-width: 6.35rem;
+          height: 2.15rem;
+          justify-content: center;
+          border-radius: 999px !important;
+        }
+
+        [data-layout="clouds"] .clouds-chat-right-rail {
+          padding: 1rem !important;
+          gap: 1.2rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-metric-card {
+          padding: 0.85rem 1rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-history-list {
+          gap: 0.55rem !important;
+          padding-right: 0.3rem !important;
+        }
+
+        [data-layout="clouds"] .clouds-history-card {
+          padding: 0.75rem 0.95rem !important;
         }
       `}</style>
     </div>

@@ -668,10 +668,10 @@ export function ChatPanel({
       style={{ display: isActive ? undefined : "none" }}
     >
       {/* ---- Messages area ---- */}
-      <div className="flex-1 min-h-0 border border-[var(--ch-border)] rounded-sm overflow-hidden flex flex-col">
+      <div className="clouds-chat-messages-panel flex-1 min-h-0 border border-[var(--ch-border)] rounded-sm overflow-hidden flex flex-col">
         {/* ---- Messages header bar ---- */}
-        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)]">
-          <span className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-35">
+        <div className="clouds-chat-header shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-base)]">
+          <span className="clouds-section-title text-[10px] font-bold uppercase tracking-[0.15em] opacity-35">
             Conversation
           </span>
           {chat.messages.length > 0 && !confirmNewChat && (
@@ -705,7 +705,7 @@ export function ChatPanel({
             </div>
           )}
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+        <div className="clouds-chat-scroll flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
           {/* Init error */}
           {chat.initError && (
             <div className="flex items-start gap-3 p-4 border border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] rounded-sm">
@@ -723,9 +723,9 @@ export function ChatPanel({
 
           {/* Empty state */}
           {!chat.initError && chat.messages.length === 0 && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 opacity-30">
-              <MessageSquare className="w-10 h-10" />
-              <span className="text-[11px] uppercase tracking-widest mt-2">
+            <div className="clouds-chat-empty flex-1 flex flex-col items-center justify-center gap-2 opacity-30">
+              <MessageSquare className="clouds-chat-empty-icon w-10 h-10" />
+              <span className="clouds-chat-empty-text text-[11px] uppercase tracking-widest mt-2">
                 {chat.isReady ? "Send a message to start" : "Connecting to PI\u2026"}
               </span>
               {!chat.isReady && !chat.initError && (
@@ -788,7 +788,7 @@ export function ChatPanel({
                           ))}
                       </div>
                     )}
-                    <div className="border border-[var(--ch-border)] bg-[var(--ch-bg-elevated)] px-4 py-2.5 rounded-sm w-fit">
+                    <div className="clouds-chat-message-bubble border border-[var(--ch-border)] bg-[var(--ch-bg-elevated)] px-4 py-2.5 rounded-sm w-fit">
                       <p className="text-[12px] leading-relaxed whitespace-pre-wrap break-words">
                         {msg.content}
                       </p>
@@ -804,7 +804,7 @@ export function ChatPanel({
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 ml-1">
                     PI {msg.isStreaming ? "\u2022 responding\u2026" : ""}
                   </span>
-                  <div className="border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-4 py-2.5 rounded-sm">
+                  <div className="clouds-chat-message-bubble border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-4 py-2.5 rounded-sm">
                     {msg.thinking && (
                       <details className="mb-2">
                         <summary className="cursor-pointer text-[10px] uppercase tracking-wider opacity-30 hover:opacity-60 transition-opacity select-none">
@@ -851,7 +851,7 @@ export function ChatPanel({
       </div>
 
       {/* ---- User Input Area ---- */}
-      <div className="shrink-0 border border-[var(--ch-border)] p-2 pl-3 flex flex-col transition-all rounded-sm">
+      <div className="clouds-chat-composer shrink-0 border border-[var(--ch-border)] p-2 pl-3 flex flex-col transition-all rounded-sm">
         {/* STT Visualizer */}
         {stt.isRecording && (
           <div className="mb-3 border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm overflow-hidden">
@@ -1003,7 +1003,7 @@ export function ChatPanel({
           ref={textareaRef}
           onInput={handleInput}
           value={draftText}
-          className="w-full bg-transparent resize-none outline-none min-h-[50px] overflow-y-auto leading-relaxed"
+          className="clouds-chat-input w-full bg-transparent resize-none outline-none min-h-[50px] overflow-y-auto leading-relaxed"
           placeholder="Type your input here..."
           rows={1}
           style={{ fontSize: "12px" }}
@@ -1072,10 +1072,10 @@ export function ChatPanel({
           onChange={handleImageSelect}
         />
 
-        <div className="flex justify-between items-end mt-2 pt-2 border-t border-[var(--ch-border)]">
+        <div className="clouds-chat-toolbar flex justify-between items-end mt-2 pt-2 border-t border-[var(--ch-border)]">
           <div className="flex gap-2">
             <button
-              className={`p-2 border rounded-sm transition-colors ${
+              className={`clouds-chat-icon-button p-2 border rounded-sm transition-colors ${
                 chat.attachedImages.length > 0
                   ? "border-[var(--ch-warning)] text-[var(--ch-warning)] bg-[var(--ch-warning)]/10"
                   : "border-[var(--ch-border)] hover:bg-[var(--ch-bg-elevated)] hover:text-[var(--ch-text)]"
@@ -1086,7 +1086,7 @@ export function ChatPanel({
               <ImageIcon className="w-4 h-4" />
             </button>
             <button
-              className={`p-2 border rounded-sm transition-colors ${
+              className={`clouds-chat-icon-button p-2 border rounded-sm transition-colors ${
                 chat.attachedDocuments.length > 0
                   ? "border-[var(--ch-warning)] text-[var(--ch-warning)] bg-[var(--ch-warning)]/10"
                   : "border-[var(--ch-border)] hover:bg-[var(--ch-bg-elevated)] hover:text-[var(--ch-text)]"
@@ -1097,14 +1097,14 @@ export function ChatPanel({
               <FileUp className="w-4 h-4" />
             </button>
             <button
-              className="p-2 border border-[var(--ch-border)] rounded-sm transition-colors hover:bg-[var(--ch-bg-elevated)] hover:text-[var(--ch-text)]"
+              className="clouds-chat-icon-button p-2 border border-[var(--ch-border)] rounded-sm transition-colors hover:bg-[var(--ch-bg-elevated)] hover:text-[var(--ch-text)]"
               title="Paste text as separate context for AI"
               onClick={addPasteBox}
             >
               <Clipboard className="w-4 h-4" />
             </button>
             <button
-              className={`p-2 border rounded-sm transition-colors relative ${
+              className={`clouds-chat-icon-button p-2 border rounded-sm transition-colors relative ${
                 stt.isRecording
                   ? "border-[var(--ch-error)] text-[var(--ch-error)] bg-[var(--ch-error)]/10 animate-pulse"
                   : "border-[var(--ch-border)] hover:bg-[var(--ch-bg-elevated)] hover:text-[var(--ch-text)]"
@@ -1133,7 +1133,7 @@ export function ChatPanel({
           <div className="flex items-center gap-2">
             {chat.isStreaming && (
               <button
-                className="px-3 py-2 border border-[var(--ch-error-border)] text-[var(--ch-error)] hover:bg-[var(--ch-error-bg)] transition-colors font-bold flex items-center gap-1.5 rounded-sm text-[10px] uppercase tracking-widest"
+                className="clouds-chat-send-button px-3 py-2 border border-[var(--ch-error-border)] text-[var(--ch-error)] hover:bg-[var(--ch-error-bg)] transition-colors font-bold flex items-center gap-1.5 rounded-sm text-[10px] uppercase tracking-widest"
                 onClick={() => chat.abort()}
               >
                 <Square className="w-3.5 h-3.5" />
@@ -1142,7 +1142,7 @@ export function ChatPanel({
             )}
             {!chat.isReady && !chat.isStreaming && (
               <button
-                className="px-4 py-2 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 transition-colors font-bold flex items-center gap-1.5 rounded-sm text-[10px] uppercase tracking-widest"
+                className="clouds-chat-send-button px-4 py-2 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 transition-colors font-bold flex items-center gap-1.5 rounded-sm text-[10px] uppercase tracking-widest"
                 onClick={() => chat.reinit()}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -1151,7 +1151,7 @@ export function ChatPanel({
             )}
             {chat.isReady && (
               <button
-                className="px-6 py-2 border border-[var(--ch-border)] hover:bg-[var(--ch-bg-elevated)] bg-[var(--ch-bg-page)] transition-colors font-bold flex items-center gap-2 rounded-sm"
+                className="clouds-chat-send-button px-6 py-2 border border-[var(--ch-border)] hover:bg-[var(--ch-bg-elevated)] bg-[var(--ch-bg-page)] transition-colors font-bold flex items-center gap-2 rounded-sm"
                 onClick={doSend}
               >
                 <span className="uppercase text-[10px] tracking-widest">
