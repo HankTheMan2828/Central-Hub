@@ -97,6 +97,8 @@ frontend/
 
 Replaced the scaffolded Clouds placeholder with a floating cloud shell in `src/components/CloudsLayout.tsx` and routed active tab content from `src/app/page.tsx` into left/main/right slots. Clouds now uses a small rectangular Menu cloud plus a circular settings button; the Menu opens a floating nav cloud and the settings button opens the existing settings modal. Chat/plain uses main chat plus the existing metrics/history side cloud, coding/search/typing/snippets use the centered main cloud, and Docs Area uses shorter left/right clouds for Saves and AI Assist around the larger centered editor cloud. `src/components/tabs/WordTab.tsx` now supports optional portal targets for those Docs side clouds, and `src/components/LeftNav.tsx` can hide Docs sub-options in the Clouds menu while preserving Foundations unchanged. Notable: `npx.cmd tsc --noEmit` passed; focused ESLint passes for `CloudsLayout.tsx` and `LeftNav.tsx`, while broader focused lint still hits pre-existing `page.tsx` explicit-any and `WordTab` effect-rule debt.
 
+Final polish on the same branch keeps the Clouds main bubble visually centered by reserving symmetric side grid space even when only one side cloud is visible. The main bubble was widened/tallened enough for the Docs letter page without horizontal scrolling, and the side clouds were kept shorter with a compact Saves list treatment in `src/components/tabs/wordtab/SavesView.tsx`. Main-cloud inner boxes, Chat tab titles, and the Clouds menu panels now share a consistent rounded corner radius scoped to `data-layout="clouds"` so Foundations remains unchanged. Latest checks used: `npx.cmd tsc --noEmit` and focused `npx.cmd eslint src/components/CloudsLayout.tsx`.
+
 ## How to verify nothing is broken
 
 ```bash
