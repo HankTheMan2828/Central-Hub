@@ -654,6 +654,15 @@ export function SearchTab({
     );
   }, [records]);
 
+  const removeRecord = useCallback((recordId: string) => {
+    setRecords((prev) => prev.filter((r) => r.id !== recordId));
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.recordId === recordId ? { ...t, recordId: undefined } : t,
+      ),
+    );
+  }, []);
+
   const updateActiveNote = useCallback((noteMarkdown: string) => {
     if (!active) return;
     const now = Date.now();
@@ -1190,6 +1199,7 @@ export function SearchTab({
               empty="No search history yet."
               onOpen={openRecord}
               onTogglePin={toggleRecordPinned}
+              onRemove={removeRecord}
             />
           )}
           {sidebarView === "pinned" && (
@@ -1198,6 +1208,7 @@ export function SearchTab({
               empty="No pinned searches yet."
               onOpen={openRecord}
               onTogglePin={toggleRecordPinned}
+              onRemove={removeRecord}
             />
           )}
           {sidebarView === "note" && (
@@ -1272,11 +1283,13 @@ function RecordList({
   empty,
   onOpen,
   onTogglePin,
+  onRemove,
 }: {
   records: SearchRecord[];
   empty: string;
   onOpen: (record: SearchRecord) => void;
   onTogglePin: (recordId: string) => void;
+  onRemove: (recordId: string) => void;
 }) {
   if (records.length === 0) {
     return (
@@ -1291,7 +1304,7 @@ function RecordList({
       {records.map((record) => (
         <div
           key={record.id}
-          className="w-full px-3 py-2.5 border-b border-[var(--ch-border-faint)] hover:bg-[var(--ch-bg-hover)] transition-colors flex items-start gap-2"
+          className="group w-full px-3 py-2.5 border-b border-[var(--ch-border-faint)] hover:bg-[var(--ch-bg-hover)] transition-colors flex items-start gap-2"
         >
           <button
             type="button"
@@ -1317,6 +1330,14 @@ function RecordList({
             className="mt-0.5 p-1 rounded-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-accent)] hover:bg-[var(--ch-bg-base)] shrink-0"
           >
             {record.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(record.id)}
+            title="Delete search"
+            className="mt-0.5 p-1 rounded-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] hover:bg-[var(--ch-bg-base)] shrink-0 opacity-60 group-hover:opacity-100"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       ))}
