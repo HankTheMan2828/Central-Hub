@@ -1291,6 +1291,8 @@ function RecordList({
   onTogglePin: (recordId: string) => void;
   onRemove: (recordId: string) => void;
 }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
   if (records.length === 0) {
     return (
       <div className="p-4 text-[10px] uppercase tracking-widest text-[var(--ch-text-faint)] text-center">
@@ -1333,9 +1335,21 @@ function RecordList({
           </button>
           <button
             type="button"
-            onClick={() => onRemove(record.id)}
-            title="Delete search"
-            className="mt-0.5 p-1 rounded-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] hover:bg-[var(--ch-bg-base)] shrink-0 opacity-60 group-hover:opacity-100"
+            onClick={() => {
+              if (confirmId === record.id) {
+                onRemove(record.id);
+                setConfirmId(null);
+              } else {
+                setConfirmId(record.id);
+              }
+            }}
+            onBlur={() => setConfirmId((curr) => (curr === record.id ? null : curr))}
+            title={confirmId === record.id ? "Click again to confirm" : "Delete search"}
+            className={`mt-0.5 p-1 rounded-sm hover:bg-[var(--ch-bg-base)] shrink-0 ${
+              confirmId === record.id
+                ? "text-[var(--ch-error)] opacity-100"
+                : "text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] opacity-60 group-hover:opacity-100"
+            }`}
           >
             <X className="w-3.5 h-3.5" />
           </button>
