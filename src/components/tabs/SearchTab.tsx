@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Search,
   X,
@@ -14,6 +15,7 @@ import {
   PinOff,
   FileText,
   Settings2,
+  ChevronDown,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -305,7 +307,17 @@ function loadInitialSearchState(): {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function SearchTab() {
+interface SearchTabProps {
+  topPortalId?: string;
+  bottomPortalId?: string;
+  deskPortalId?: string;
+}
+
+export function SearchTab({
+  topPortalId,
+  bottomPortalId,
+  deskPortalId,
+}: SearchTabProps = {}) {
   const [initialState] = useState(loadInitialSearchState);
   const [tabs, setTabs] = useState<SearchTabState[]>(initialState.tabs);
   const [activeId, setActiveId] = useState<string>(initialState.activeId);
@@ -317,6 +329,49 @@ export function SearchTab() {
   >({});
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdsRef = useRef<Map<string, string>>(new Map());
+  const presentMenuRef = useRef<HTMLDivElement>(null);
+  const [presentOpen, setPresentOpen] = useState(false);
+
+  useEffect(() => {
+    if (!presentOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const t = event.target;
+      if (t instanceof Node && presentMenuRef.current?.contains(t)) return;
+      setPresentOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [presentOpen]);
+
+  const [topPortalTarget, setTopPortalTarget] =
+    useState<HTMLElement | null>(null);
+  const [bottomPortalTarget, setBottomPortalTarget] =
+    useState<HTMLElement | null>(null);
+  const [deskPortalTarget, setDeskPortalTarget] =
+    useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!topPortalId) return;
+    const sync = () => setTopPortalTarget(document.getElementById(topPortalId));
+    const frame = window.requestAnimationFrame(sync);
+    return () => window.cancelAnimationFrame(frame);
+  }, [topPortalId]);
+
+  useEffect(() => {
+    if (!bottomPortalId) return;
+    const sync = () =>
+      setBottomPortalTarget(document.getElementById(bottomPortalId));
+    const frame = window.requestAnimationFrame(sync);
+    return () => window.cancelAnimationFrame(frame);
+  }, [bottomPortalId]);
+
+  useEffect(() => {
+    if (!deskPortalId) return;
+    const sync = () =>
+      setDeskPortalTarget(document.getElementById(deskPortalId));
+    const frame = window.requestAnimationFrame(sync);
+    return () => window.cancelAnimationFrame(frame);
+  }, [deskPortalId]);
 
   // Persist
   useEffect(() => {
@@ -599,6 +654,15 @@ export function SearchTab() {
     );
   }, [records]);
 
+  const removeRecord = useCallback((recordId: string) => {
+    setRecords((prev) => prev.filter((r) => r.id !== recordId));
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.recordId === recordId ? { ...t, recordId: undefined } : t,
+      ),
+    );
+  }, []);
+
   const updateActiveNote = useCallback((noteMarkdown: string) => {
     if (!active) return;
     const now = Date.now();
@@ -733,11 +797,10 @@ export function SearchTab() {
   const visibleRecords = records.filter((r) => !r.pinned);
   const pinnedRecords = records.filter((r) => r.pinned);
 
-  return (
-    <div className="flex-1 flex h-full min-w-[620px] gap-2 overflow-hidden">
-      <div className="flex-1 flex flex-col h-full min-w-[360px] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm overflow-hidden">
-      {/* Header */}
-      <header className="px-4 py-2 border-b border-[var(--ch-border-subtle)] flex items-center gap-2 shrink-0">
+  const usePortals = Boolean(topPortalId && bottomPortalId && deskPortalId);
+
+  const headerNode = (
+    <header className="px-4 py-2 border-b border-[var(--ch-border-subtle)] flex items-center gap-2 shrink-0">
         <Search className="w-3.5 h-3.5 text-[var(--ch-accent)]" />
         <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ch-accent)]">
           AI Search
@@ -745,10 +808,11 @@ export function SearchTab() {
         <span className="ml-auto text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono">
           {tabs.length} / {MAX_TABS} tabs
         </span>
-      </header>
+    </header>
+  );
 
-      {/* Tab strip */}
-      <div className="flex items-stretch border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] overflow-x-auto shrink-0">
+  const tabStripNode = (
+    <div className="flex items-stretch border-b border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] overflow-x-auto shrink-0">
         {tabs.map((t) => {
           const isActive = t.id === activeId;
           return (
@@ -769,7 +833,7 @@ export function SearchTab() {
                 <Loader2 className="w-3 h-3 animate-spin text-[var(--ch-warning)] shrink-0" />
               )}
               <button
-                className="opacity-30 hover:opacity-100 hover:text-[var(--ch-error)] shrink-0 p-0.5 -mr-1"
+                className="opacity-60 group-hover:opacity-100 hover:text-[var(--ch-error)] hover:opacity-100 shrink-0 p-0.5 -mr-1"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(t.id);
@@ -789,34 +853,32 @@ export function SearchTab() {
           title="New tab"
         >
           <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      </button>
+    </div>
+  );
 
-      {/* Active tab content */}
-      {active && (
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {/* Search input */}
-          <div className="p-3 border-b border-[var(--ch-border-subtle)] flex gap-2 shrink-0">
-            <input
-              ref={inputRef}
-              type="text"
-              value={active.inputDraft}
+  const inputNode = active ? (
+    <div className="p-2 border-b border-[var(--ch-border-subtle)] flex gap-2 shrink-0">
+      <input
+        ref={inputRef}
+        type="text"
+        value={active.inputDraft}
               onChange={(e) =>
                 updateActive({ inputDraft: e.target.value })
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSearch();
               }}
-              placeholder="Ask anything\u2026"
+              placeholder={"Ask anything\u2026"}
               autoFocus
-              className="flex-1 bg-[var(--ch-bg-elevated)] border border-[var(--ch-border)] text-[12px] px-3 py-2 rounded-sm outline-none focus:border-[var(--ch-accent)] transition-colors font-mono"
+              className="flex-1 bg-[var(--ch-bg-elevated)] border border-[var(--ch-border)] text-[11px] px-2.5 py-1.5 rounded-sm outline-none focus:border-[var(--ch-accent)] transition-colors font-mono"
             />
             <button
               onClick={handleSearch}
               disabled={
                 !active.inputDraft.trim() || active.status === "thinking"
               }
-              className="px-4 py-2 border border-[var(--ch-border)] hover:border-[var(--ch-accent)] hover:bg-[var(--ch-accent-5)] transition-colors rounded-sm flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 border border-[var(--ch-border)] hover:border-[var(--ch-accent)] hover:bg-[var(--ch-accent-5)] transition-colors rounded-sm flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {active.status === "thinking" ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -826,13 +888,14 @@ export function SearchTab() {
               <span className="text-[10px] uppercase tracking-widest">
                 {active.status === "thinking" ? "Thinking\u2026" : "Search"}
               </span>
-            </button>
-          </div>
+      </button>
+    </div>
+  ) : null;
 
-          {/* Content area */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Error */}
-            {active.status === "error" && (
+  const resultsNode = active ? (
+    <div className="flex-1 overflow-y-auto">
+      {/* Error */}
+      {active.status === "error" && (
               <div className="m-3 p-3 border border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] rounded-sm flex gap-2 items-start">
                 <AlertCircle className="w-4 h-4 text-[var(--ch-error)] shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -1009,16 +1072,15 @@ export function SearchTab() {
             {active.status === "done" &&
               !active.aiAnswer &&
               active.sources.length === 0 && (
-                <div className="flex flex-1 items-center justify-center py-16 text-[var(--ch-text-faint)] text-[11px] uppercase tracking-widest">
-                  No results
-                </div>
-              )}
-          </div>
+        <div className="flex flex-1 items-center justify-center py-16 text-[var(--ch-text-faint)] text-[11px] uppercase tracking-widest">
+          No results
         </div>
       )}
-      </div>
+    </div>
+  ) : null;
 
-      <aside className="w-[300px] max-w-[32%] min-w-[260px] h-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm flex flex-col overflow-hidden">
+  const deskNode = (
+    <aside className="w-[300px] max-w-[32%] min-w-[260px] h-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm flex flex-col overflow-hidden">
         <div className="px-3 py-2 border-b border-[var(--ch-border-subtle)] flex items-center gap-2 shrink-0">
           <Settings2 className="w-3.5 h-3.5 text-[var(--ch-accent)]" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ch-accent)]">
@@ -1058,18 +1120,49 @@ export function SearchTab() {
             <span className="w-16 shrink-0 text-[8px] uppercase tracking-widest text-[var(--ch-text-faint)] font-bold">
               Present
             </span>
-            <select
-              value={active?.presentation ?? "summary"}
-              onChange={(e) => setActivePresentation(e.target.value as PresentationMode)}
-              disabled={!active}
-              className="flex-1 min-w-0 bg-[var(--ch-bg-page)] border border-[var(--ch-border-subtle)] rounded-sm px-2 py-1 text-[10px] font-mono text-[var(--ch-text)] focus:outline-none focus:border-[var(--ch-accent)] disabled:opacity-30"
-            >
-              {PRESENTATION_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div ref={presentMenuRef} className="relative flex-1 min-w-0">
+              <button
+                type="button"
+                disabled={!active}
+                onClick={() => setPresentOpen((v) => !v)}
+                className="clouds-coding-dropdown-button w-full flex items-center justify-between gap-1.5 bg-[var(--ch-bg-page)] border border-[var(--ch-border-subtle)] rounded-sm px-2 py-1 text-[10px] font-mono text-[var(--ch-text)] hover:border-[var(--ch-accent)] focus:outline-none focus:border-[var(--ch-accent)] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <span className="truncate">
+                  {PRESENTATION_OPTIONS.find(
+                    (o) => o.id === (active?.presentation ?? "summary"),
+                  )?.label ?? "Summary"}
+                </span>
+                <ChevronDown
+                  className={`w-3 h-3 shrink-0 opacity-55 transition-transform ${
+                    presentOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {presentOpen && (
+                <div className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-30 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden p-1 flex flex-col">
+                  {PRESENTATION_OPTIONS.map((option) => {
+                    const selected = (active?.presentation ?? "summary") === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setPresentOpen(false);
+                          setActivePresentation(option.id);
+                        }}
+                        className={`w-full text-left px-2 py-1.5 rounded-sm text-[10px] font-mono ${
+                          selected
+                            ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                            : "text-[var(--ch-text)] hover:bg-[var(--ch-bg-hover)] hover:text-[var(--ch-accent)]"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1106,6 +1199,7 @@ export function SearchTab() {
               empty="No search history yet."
               onOpen={openRecord}
               onTogglePin={toggleRecordPinned}
+              onRemove={removeRecord}
             />
           )}
           {sidebarView === "pinned" && (
@@ -1114,6 +1208,7 @@ export function SearchTab() {
               empty="No pinned searches yet."
               onOpen={openRecord}
               onTogglePin={toggleRecordPinned}
+              onRemove={removeRecord}
             />
           )}
           {sidebarView === "note" && (
@@ -1131,7 +1226,50 @@ export function SearchTab() {
             </div>
           )}
         </div>
-      </aside>
+    </aside>
+  );
+
+  if (usePortals) {
+    return (
+      <>
+        {topPortalTarget &&
+          createPortal(
+            <section className="flex flex-col h-full w-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm overflow-hidden">
+              {headerNode}
+              {tabStripNode}
+              {inputNode}
+            </section>,
+            topPortalTarget,
+          )}
+        {bottomPortalTarget &&
+          createPortal(
+            <section className="flex flex-col h-full w-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm overflow-hidden">
+              {resultsNode ?? (
+                <div className="flex flex-1 items-center justify-center py-16 text-[var(--ch-text-faint)] text-[11px] uppercase tracking-widest">
+                  No active search
+                </div>
+              )}
+            </section>,
+            bottomPortalTarget,
+          )}
+        {deskPortalTarget && createPortal(deskNode, deskPortalTarget)}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex h-full min-w-[620px] gap-2 overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-w-[360px] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm overflow-hidden">
+        {headerNode}
+        {tabStripNode}
+        {active && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {inputNode}
+            {resultsNode}
+          </div>
+        )}
+      </div>
+      {deskNode}
     </div>
   );
 }
@@ -1145,12 +1283,16 @@ function RecordList({
   empty,
   onOpen,
   onTogglePin,
+  onRemove,
 }: {
   records: SearchRecord[];
   empty: string;
   onOpen: (record: SearchRecord) => void;
   onTogglePin: (recordId: string) => void;
+  onRemove: (recordId: string) => void;
 }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
   if (records.length === 0) {
     return (
       <div className="p-4 text-[10px] uppercase tracking-widest text-[var(--ch-text-faint)] text-center">
@@ -1164,7 +1306,7 @@ function RecordList({
       {records.map((record) => (
         <div
           key={record.id}
-          className="w-full px-3 py-2.5 border-b border-[var(--ch-border-faint)] hover:bg-[var(--ch-bg-hover)] transition-colors flex items-start gap-2"
+          className="group w-full px-3 py-2.5 border-b border-[var(--ch-border-faint)] hover:bg-[var(--ch-bg-hover)] transition-colors flex items-start gap-2"
         >
           <button
             type="button"
@@ -1191,6 +1333,39 @@ function RecordList({
           >
             {record.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
+          {confirmId !== record.id ? (
+            <button
+              type="button"
+              onClick={() => setConfirmId(record.id)}
+              title="Delete search"
+              className="mt-0.5 p-1 rounded-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] hover:bg-[var(--ch-bg-base)] shrink-0 opacity-60 group-hover:opacity-100"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div className="mt-0.5 flex items-center gap-1 text-[10px] shrink-0">
+              <span className="text-[var(--ch-error-text)] uppercase tracking-wider">
+                Delete?
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(record.id);
+                  setConfirmId(null);
+                }}
+                className="px-1.5 py-0.5 border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm uppercase tracking-wider transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmId(null)}
+                className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
+              >
+                No
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>

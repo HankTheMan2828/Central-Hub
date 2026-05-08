@@ -47,8 +47,18 @@ import {
   usePiChat,
   type StoredModelPreference,
 } from "@/hooks/usePiChat";
-import { useTheme, THEMES, LAYOUTS } from "@/components/ThemeProvider";
+import {
+  useTheme,
+  THEMES,
+  LAYOUTS,
+} from "@/components/ThemeProvider";
 import { CloudsLayout } from "@/components/CloudsLayout";
+
+type IpcInvokeResult = {
+  success?: boolean;
+  error?: string;
+  configured?: boolean;
+};
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -59,7 +69,12 @@ export default function Home() {
   const { history, upsertEntry, removeEntry, updateEntryTitle } =
     useChatHistory();
 
-  const { theme, setTheme, layout, setLayout } = useTheme();
+  const {
+    theme,
+    setTheme,
+    layout,
+    setLayout,
+  } = useTheme();
 
   /* ---- menu state ---- */
   const [menuOpen, setMenuOpen] = useState(false);
@@ -187,7 +202,7 @@ export default function Home() {
       await sharedChat.setApiKey("openrouter", openRouterKey.trim());
       setKeySaved(true);
       setTimeout(() => setKeySaved(false), 3000);
-    } catch (e: any) {
+    } catch (e) {
       console.error("Failed to save API key:", e);
     } finally {
       setSavingKey(false);
@@ -200,7 +215,7 @@ export default function Home() {
       setModelSearch("");
       try {
         await sharedChat.setModel(model.provider, model.id);
-      } catch (e: any) {
+      } catch (e) {
         console.error("Failed to set model:", e);
       }
     },
@@ -215,7 +230,7 @@ export default function Home() {
       try {
         const electron = (0, eval)("require")("electron") as {
           ipcRenderer: {
-            invoke: (c: string, ...a: unknown[]) => Promise<any>;
+            invoke: (c: string, ...a: unknown[]) => Promise<IpcInvokeResult>;
           };
         };
         return await electron.ipcRenderer.invoke(channel, ...args);
@@ -271,17 +286,6 @@ export default function Home() {
     setMenuTab("settings");
     setMenuOpen(true);
   }, []);
-
-  const leftNavContent = (
-    <LeftNav
-      active={activeNavTab}
-      onSelect={setActiveNavTab}
-      chatSubTab={chatSubTab}
-      onChatSubSelect={setChatSubTab}
-      wordSubTab={wordSubTab}
-      onWordSubSelect={setWordSubTab}
-    />
-  );
 
   const cloudsNavContent = (
     <LeftNav
@@ -652,15 +656,34 @@ export default function Home() {
       <div className="h-full min-h-0 box-border flex flex-col p-3">
         <TypingTab />
       </div>
-    ) : activeNavTab === "search" ? (
-      <div className="h-full min-h-0 box-border flex flex-col p-3">
-        <SearchTab />
-      </div>
-    ) : (
+    ) : activeNavTab === "search" ? undefined : (
       <div className="h-full min-h-0 box-border flex flex-col p-3">
         <SnippetsTab />
       </div>
     );
+
+  const cloudsMainStackTop =
+    activeNavTab === "search" ? (
+      <div
+        id="clouds-search-top-slot"
+        className="h-full min-h-0 box-border p-3 [&>section]:h-full [&>section]:w-full [&>section]:border-0 [&>section]:rounded-[1.85rem]"
+      />
+    ) : undefined;
+
+  const cloudsMainStackBottom =
+    activeNavTab === "search" ? (
+      <div className="h-full min-h-0 box-border p-3 flex flex-col">
+        <div
+          id="clouds-search-bottom-slot"
+          className="flex-1 min-h-0 [&>section]:h-full [&>section]:w-full [&>section]:border-0 [&>section]:rounded-[1.85rem]"
+        />
+        <SearchTab
+          topPortalId="clouds-search-top-slot"
+          bottomPortalId="clouds-search-bottom-slot"
+          deskPortalId="clouds-search-desk-slot"
+        />
+      </div>
+    ) : undefined;
 
   const cloudsRightContent =
     activeNavTab === "chat" && chatSubTab === "plain" ? (
@@ -668,6 +691,11 @@ export default function Home() {
     ) : activeNavTab === "word" ? (
       <div
         id="clouds-word-ai-slot"
+        className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
+      />
+    ) : activeNavTab === "search" ? (
+      <div
+        id="clouds-search-desk-slot"
         className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
       />
     ) : undefined;
@@ -796,6 +824,7 @@ export default function Home() {
                         })}
                       </div>
                     </section>
+
 
                     {/* Theme grid — dark left, light right */}
                     <div className="grid grid-cols-2 gap-4">
@@ -1305,6 +1334,8 @@ export default function Home() {
           nav={cloudsNavContent}
           left={cloudsLeftContent}
           main={cloudsMainContent}
+          mainStackTop={cloudsMainStackTop}
+          mainStackBottom={cloudsMainStackBottom}
           right={cloudsRightContent}
           rightStackTop={cloudsRightStackTop}
           rightStackBottom={cloudsRightStackBottom}
