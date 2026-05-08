@@ -610,6 +610,11 @@ function CodingAgentTabPanel({
   const activeChatIdRef = useRef<string | null>(null);
   const resumeContextRef = useRef<string | null>(null);
   const folderInputRef = useRef<DirectoryInputElement>(null);
+  // Track which coding-agent chat records have already had an LLM-generated
+  // title applied this session, so we don't re-fire pi:generate-title every
+  // time the user sends another message in the same chat.
+  const titledChatIdsRef = useRef<Set<string>>(new Set());
+  const wasStreamingForTitleRef = useRef<boolean>(false);
   const [draft, setDraft] = useState("");
   const [customWorkspaces, setCustomWorkspaces] = useState(loadCustomWorkspaces);
   const [archivedWorkspaces, setArchivedWorkspaces] =
@@ -822,6 +827,68 @@ function CodingAgentTabPanel({
     });
   }, [chat.messages, chat.isStreaming]);
 
+  /* Auto-generate a short tab title after the first user → assistant
+   * exchange, mirroring ChatPanel's pi:generate-title flow. The default
+   * title from recordCodingTurn() is a 54-char truncation of the user's
+   * message; this upgrades it once per chat record. Costs ~20 output
+   * tokens on qwen3-8b — cheap enough to do automatically. */
+  useEffect(() => {
+    const wasStreaming = wasStreamingForTitleRef.current;
+    wasStreamingForTitleRef.current = chat.isStreaming;
+
+    const activeId = activeChatIdRef.current;
+    if (!activeId) return;
+    if (!wasStreaming || chat.isStreaming) return;
+    if (titledChatIdsRef.current.has(activeId)) return;
+
+    const userMessage = chat.messages.find((m) => m.role === "user");
+    const assistantMessage = chat.messages.find(
+      (m) => m.role === "assistant" && !m.isStreaming
+    );
+    if (!userMessage || !assistantMessage) return;
+
+    titledChatIdsRef.current.add(activeId);
+
+    let ipc: { invoke: (channel: string, args: unknown) => Promise<unknown> } | null = null;
+    try {
+      ipc = (0, eval)("require")("electron").ipcRenderer;
+    } catch {}
+    ipc
+      ?.invoke("pi:generate-title", {
+        userMessage: userMessage.content,
+        assistantMessage: assistantMessage.content,
+      })
+      .then((result) => {
+        if (
+          typeof result !== "object" ||
+          result === null ||
+          !("success" in result) ||
+          !("title" in result) ||
+          (result as { success?: unknown }).success !== true ||
+          typeof (result as { title?: unknown }).title !== "string"
+        ) {
+          return;
+        }
+        const title = (result as { title: string }).title.trim();
+        if (!title) return;
+
+        // Update the active tab title (visible in the tab strip).
+        onAgentTabTitleChange(activeAgentTabId, title);
+        // Update the chat record so future loads / the chat list use it too.
+        setChatRecords((prev) => {
+          const next = prev.map((record) =>
+            record.id === activeId ? { ...record, title } : record
+          );
+          saveChatRecords(next);
+          return next;
+        });
+      })
+      .catch(() => {
+        // Non-fatal: keep the truncation-based default title.
+        titledChatIdsRef.current.delete(activeId);
+      });
+  }, [chat.isStreaming, chat.messages, activeAgentTabId, onAgentTabTitleChange]);
+
   const handleModelChange = async (value: string) => {
     if (!value) return;
     const { provider, id } = splitModelKey(value);
@@ -986,45 +1053,54 @@ function CodingAgentTabPanel({
 
   const recordCodingTurn = (text: string, now: number) => {
     const title = text.replace(/\s+/g, " ").trim().slice(0, 54) || "Coding chat";
-    let nextRecords: CodingAgentChatRecord[] = [];
+
+    // Decide new-vs-existing chat OUTSIDE the state updater so the updater
+    // stays pure. React StrictMode invokes updaters twice in dev to detect
+    // exactly the kind of side-effect-in-updater bug that used to live here
+    // (setActiveChatId / onAgentTabTitleChange called from inside the
+    // setChatRecords updater triggered a parent setState during a child's
+    // render → "Cannot update a component while rendering a different one").
+    const priorActiveId = activeChatIdRef.current;
+    const priorRecord = priorActiveId
+      ? chatRecords.find((record) => record.id === priorActiveId)
+      : null;
+    const isNewChat = !(priorActiveId && priorRecord);
+    const resolvedId = isNewChat
+      ? `coding-${now}-${Math.random().toString(36).slice(2, 7)}`
+      : (priorActiveId as string);
+    if (isNewChat) {
+      activeChatIdRef.current = resolvedId;
+    }
 
     setChatRecords((prev) => {
-      const activeId = activeChatIdRef.current;
-      const existingRecord = activeId
-        ? prev.find((record) => record.id === activeId)
-        : null;
-
-      if (activeId && existingRecord) {
-        nextRecords = prev.map((record) =>
-          record.id === activeId
-            ? {
-                ...record,
-                updatedAt: now,
-              }
-            : record
-        );
-      } else {
-        const id = `coding-${now}-${Math.random().toString(36).slice(2, 7)}`;
-        activeChatIdRef.current = id;
-        setActiveChatId(id);
-        onAgentTabTitleChange(activeAgentTabId, title);
-        nextRecords = [
-          {
-            id,
-            title,
-            workspaceId,
-            workspaceName: selectedWorkspace.name,
-            workspacePath: selectedWorkspace.path,
-            createdAt: now,
-            updatedAt: now,
-            messages: [],
-          },
-          ...prev,
-        ].slice(0, MAX_CHAT_RECORDS);
-      }
+      const present = prev.some((record) => record.id === resolvedId);
+      const nextRecords: CodingAgentChatRecord[] = present
+        ? prev.map((record) =>
+            record.id === resolvedId
+              ? { ...record, updatedAt: now }
+              : record
+          )
+        : [
+            {
+              id: resolvedId,
+              title,
+              workspaceId,
+              workspaceName: selectedWorkspace.name,
+              workspacePath: selectedWorkspace.path,
+              createdAt: now,
+              updatedAt: now,
+              messages: [],
+            },
+            ...prev,
+          ].slice(0, MAX_CHAT_RECORDS);
       saveChatRecords(nextRecords);
       return nextRecords;
     });
+
+    if (isNewChat) {
+      setActiveChatId(resolvedId);
+      onAgentTabTitleChange(activeAgentTabId, title);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

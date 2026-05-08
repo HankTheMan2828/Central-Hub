@@ -28,6 +28,7 @@ const { destroyAllSessions } = require('./main/pi-sdk');
 const { registerAutoUpdater } = require('./main/updater');
 
 require('./main/ipc-pi-session').register(ipcMain);
+require('./main/ipc-plain-session').register(ipcMain);
 require('./main/ipc-word').register(ipcMain);
 require('./main/ipc-search').register(ipcMain);
 require('./main/ipc-stt').register(ipcMain);

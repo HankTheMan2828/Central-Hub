@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { MarkdownContent } from "@/lib/markdown";
 import {
   MessageSquare,
@@ -124,7 +124,48 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const chat = usePiChat();
+  const chat = usePiChat({ sessionType: "plain" });
+
+  /* For Plain Chat: a single user question can produce multiple tool
+   * messages (e.g. the model loops `weather` 5x before answering). The
+   * desired UX is one tiny "Used <tool>" line ABOVE the assistant bubble
+   * for that turn, deduplicated by tool name. We reorder + dedupe at
+   * render time so the underlying message log stays accurate. */
+  const renderMessages = useMemo(() => {
+    const out: ChatMessage[] = [];
+    for (let i = 0; i < chat.messages.length; i++) {
+      const msg = chat.messages[i];
+      if (msg.role !== "assistant") {
+        out.push(msg);
+        continue;
+      }
+      // Collect any tool messages following this assistant bubble until we
+      // hit the next user/assistant message (or run out). Those tools all
+      // belong to this assistant turn — render them above the bubble,
+      // deduped by toolName, with isToolError sticky.
+      const tools: ChatMessage[] = [];
+      let j = i + 1;
+      while (j < chat.messages.length && chat.messages[j].role === "tool") {
+        tools.push(chat.messages[j]);
+        j++;
+      }
+      const seen = new Map<string, ChatMessage>();
+      for (const t of tools) {
+        const key = t.toolName ?? "_";
+        const existing = seen.get(key);
+        if (!existing) {
+          seen.set(key, t);
+        } else if (!existing.isToolError && t.isToolError) {
+          // Promote to error variant if any call of the same tool errored.
+          seen.set(key, { ...existing, isToolError: true });
+        }
+      }
+      for (const dedup of seen.values()) out.push(dedup);
+      out.push(msg);
+      i = j - 1;
+    }
+    return out;
+  }, [chat.messages]);
 
   /* ---- paste boxes ---- */
   const [pasteBoxes, setPasteBoxes] = useState<PasteBox[]>([]);
@@ -734,8 +775,9 @@ export function ChatPanel({
             </div>
           )}
 
-          {/* Messages */}
-          {chat.messages.map((msg) => {
+          {/* Messages — see renderMessages memo: tools are reordered above
+              their assistant bubble and deduped per turn. */}
+          {renderMessages.map((msg) => {
             if (msg.role === "user") {
               return (
                 <div key={msg.id} className="flex justify-end">
