@@ -327,10 +327,23 @@ export type UsePiChatOptions = {
    * "chat" (default) creates a normal coding-agent session via
    * `pi:session-create`. "word" creates a WordTab session via
    * `pi:word-session-create`, which registers the `word_read` tool and
-   * disables built-in fs/bash tools.
+   * disables built-in fs/bash tools. "plain" creates a Plain Chat
+   * session via `pi:plain-session-create` — built-in coding tools off,
+   * `web_search` and `weather` registered.
    */
-  sessionType?: "chat" | "word";
+  sessionType?: "chat" | "word" | "plain";
 };
+
+function sessionCreateChannelFor(type: "chat" | "word" | "plain") {
+  switch (type) {
+    case "word":
+      return "pi:word-session-create";
+    case "plain":
+      return "pi:plain-session-create";
+    default:
+      return "pi:session-create";
+  }
+}
 
 type PiSnapshotResult = {
   success?: boolean;
@@ -351,7 +364,7 @@ type AuthChangedPayload = Pick<
 export function usePiChat(options?: UsePiChatOptions) {
   const existingSessionId = options?.existingSessionId;
   const disabled = options?.disabled ?? false;
-  const sessionType: "chat" | "word" = options?.sessionType ?? "chat";
+  const sessionType: "chat" | "word" | "plain" = options?.sessionType ?? "chat";
 
   /* ---- session identity ---- */
   const [sessionId, setSessionId] = useState<string | null>(
@@ -538,7 +551,7 @@ export function usePiChat(options?: UsePiChatOptions) {
         }
 
         case "agent_start": {
-          // Flush any pending text delta before agent starts
+          // Flush any pending text delta from a prior turn (defensive).
           if (deltaBufferRef.current) {
             const buf = deltaBufferRef.current;
             deltaBufferRef.current = null;
@@ -565,30 +578,34 @@ export function usePiChat(options?: UsePiChatOptions) {
               return next;
             });
           }
+          // Open ONE assistant bubble for the entire agent turn. message_start
+          // events from each LLM turn (inc. post-tool turns) all stream into
+          // this single bubble so we never split thinking across N bubbles.
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              role: "assistant",
+              content: "",
+              timestamp: Date.now(),
+              isStreaming: true,
+            },
+          ]);
           setIsStreaming(true);
           break;
         }
 
         case "message_start": {
-          const msg = ev.message;
-          if (msg?.role === "assistant") {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: "assistant",
-                content: "",
-                timestamp: Date.now(),
-                isStreaming: true,
-              },
-            ]);
-          }
+          // Intentionally a no-op for assistant messages: agent_start already
+          // opened the single bubble. Each LLM turn between tool calls would
+          // otherwise create its own bubble (and its own THINKING header).
           break;
         }
 
         case "message_end": {
-          // Flush any remaining buffered deltas first — message_end fires
-          // before agent_end and we don't want to lose trailing content.
+          // Flush any remaining buffered deltas, but leave isStreaming=true
+          // on the bubble — the agent may still run more LLM turns after a
+          // tool call before agent_end finally marks it complete.
           if (deltaBufferRef.current) {
             const buf = deltaBufferRef.current;
             deltaBufferRef.current = null;
@@ -604,24 +621,6 @@ export function usePiChat(options?: UsePiChatOptions) {
               next[idx] = buf.type === "text"
                 ? { ...next[idx], content: next[idx].content + buf.delta }
                 : { ...next[idx], thinking: (next[idx].thinking || "") + buf.delta };
-              return next;
-            });
-          }
-
-          const msg = ev.message;
-          if (msg?.role === "assistant") {
-            setMessages((prev) => {
-              const next = [...prev];
-              let idx = next.length - 1;
-              while (
-                idx >= 0 &&
-                !(next[idx].role === "assistant")
-              ) {
-                idx--;
-              }
-              if (idx >= 0) {
-                next[idx] = { ...next[idx], isStreaming: false };
-              }
               return next;
             });
           }
@@ -652,6 +651,17 @@ export function usePiChat(options?: UsePiChatOptions) {
               return next;
             });
           }
+          // Close the single per-agent-turn assistant bubble. message_end
+          // intentionally leaves isStreaming=true so the bubble stays open
+          // through inter-turn tool calls; agent_end is the real end.
+          setMessages((prev) => {
+            let idx = prev.length - 1;
+            while (idx >= 0 && !(prev[idx].role === "assistant")) idx--;
+            if (idx < 0) return prev;
+            const next = prev.slice();
+            next[idx] = { ...next[idx], isStreaming: false };
+            return next;
+          });
           setIsStreaming(false);
           refreshSessionStats();
           break;
@@ -947,10 +957,7 @@ export function usePiChat(options?: UsePiChatOptions) {
       activeSessionRef.current = null;
     }
 
-    const channel =
-      sessionType === "word"
-        ? "pi:word-session-create"
-        : "pi:session-create";
+    const channel = sessionCreateChannelFor(sessionType);
 
     try {
       const result: any = await ipc.invoke(channel);
@@ -1166,10 +1173,7 @@ export function usePiChat(options?: UsePiChatOptions) {
           sid = existingSessionId;
           snap = { success: true, sessionId: sid, models: [], currentModel: null, providers: {} };
         } else {
-          const channel =
-            sessionType === "word"
-              ? "pi:word-session-create"
-              : "pi:session-create";
+          const channel = sessionCreateChannelFor(sessionType);
           snap = await ipc.invoke(channel);
           sid = snap.sessionId;
           createdNew = true;
@@ -1249,10 +1253,7 @@ export function usePiChat(options?: UsePiChatOptions) {
         setCurrentModel(normalizeCurrentModel(payload?.currentModel));
         setAuthProviders(payload?.providers ?? {});
 
-        const channel =
-          sessionType === "word"
-            ? "pi:word-session-create"
-            : "pi:session-create";
+        const channel = sessionCreateChannelFor(sessionType);
 
         try {
           let snap = (await ipc.invoke(channel)) as PiSnapshotResult;
