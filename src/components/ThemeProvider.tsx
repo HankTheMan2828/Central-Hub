@@ -37,7 +37,38 @@ export const LAYOUTS = [
 export type LayoutId = (typeof LAYOUTS)[number]["id"];
 
 const LAYOUT_STORAGE_KEY = "ch-layout";
-const DEFAULT_LAYOUT: LayoutId = "foundations";
+const LAYOUT_DEFAULT_VERSION_STORAGE_KEY = "ch-layout-default-version";
+const LAYOUT_DEFAULT_VERSION = "clouds-default-v1";
+const DEFAULT_LAYOUT: LayoutId = "clouds";
+
+function readStoredTheme(): ThemeId {
+  if (typeof window === "undefined") return DEFAULT_THEME;
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY) as ThemeId | null;
+    return saved && THEMES.some((t) => t.id === saved) ? saved : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+}
+
+function readStoredLayout(): LayoutId {
+  if (typeof window === "undefined") return DEFAULT_LAYOUT;
+  try {
+    const defaultVersion = window.localStorage.getItem(
+      LAYOUT_DEFAULT_VERSION_STORAGE_KEY
+    );
+    const saved = window.localStorage.getItem(
+      LAYOUT_STORAGE_KEY
+    ) as LayoutId | null;
+    return saved &&
+      LAYOUTS.some((l) => l.id === saved) &&
+      (defaultVersion === LAYOUT_DEFAULT_VERSION || saved !== "foundations")
+      ? saved
+      : DEFAULT_LAYOUT;
+  } catch {
+    return DEFAULT_LAYOUT;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Context                                                            */
@@ -67,34 +98,37 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(DEFAULT_THEME);
   const [layout, setLayoutState] = useState<LayoutId>(DEFAULT_LAYOUT);
 
-  // Hydrate from localStorage on mount
   useEffect(() => {
+    const nextTheme = readStoredTheme();
+    const nextLayout = readStoredLayout();
+
+    document.documentElement.setAttribute("data-theme", nextTheme);
+    document.documentElement.setAttribute("data-layout", nextLayout);
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY) as ThemeId | null;
-      if (saved && THEMES.some((t) => t.id === saved)) {
-        setThemeState(saved);
-        document.documentElement.setAttribute("data-theme", saved);
-      } else {
-        document.documentElement.setAttribute("data-theme", DEFAULT_THEME);
-      }
+      window.localStorage.setItem(
+        LAYOUT_DEFAULT_VERSION_STORAGE_KEY,
+        LAYOUT_DEFAULT_VERSION
+      );
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, nextLayout);
     } catch {
-      document.documentElement.setAttribute("data-theme", DEFAULT_THEME);
+      // Ignore storage errors
     }
 
-    try {
-      const savedLayout = window.localStorage.getItem(
-        LAYOUT_STORAGE_KEY
-      ) as LayoutId | null;
-      if (savedLayout && LAYOUTS.some((l) => l.id === savedLayout)) {
-        setLayoutState(savedLayout);
-        document.documentElement.setAttribute("data-layout", savedLayout);
-      } else {
-        document.documentElement.setAttribute("data-layout", DEFAULT_LAYOUT);
-      }
-    } catch {
-      document.documentElement.setAttribute("data-layout", DEFAULT_LAYOUT);
-    }
+    const frame = window.requestAnimationFrame(() => {
+      setThemeState(nextTheme);
+      setLayoutState(nextLayout);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-layout", layout);
+  }, [layout]);
 
   const setTheme = (id: ThemeId) => {
     setThemeState(id);
@@ -110,6 +144,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setLayoutState(id);
     document.documentElement.setAttribute("data-layout", id);
     try {
+      window.localStorage.setItem(
+        LAYOUT_DEFAULT_VERSION_STORAGE_KEY,
+        LAYOUT_DEFAULT_VERSION
+      );
       window.localStorage.setItem(LAYOUT_STORAGE_KEY, id);
     } catch {
       // Ignore storage errors
@@ -117,7 +155,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, layout, setLayout }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        setTheme,
+        layout,
+        setLayout,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

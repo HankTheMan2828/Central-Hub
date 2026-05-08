@@ -276,7 +276,7 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
           <button
             type="button"
             onClick={() => setModelOpen((v) => !v)}
-            className="w-full flex items-center gap-1.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] px-2 py-1 rounded-sm hover:bg-white/[0.04] text-left"
+            className="clouds-coding-dropdown-button w-full flex items-center gap-1.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] px-2 py-1 rounded-sm hover:bg-white/[0.04] text-left"
           >
             <Cpu className="w-3 h-3 text-[var(--ch-text-faint)] shrink-0" />
             <span
@@ -301,7 +301,7 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
                   setModelSearch("");
                 }}
               />
-              <div className="absolute top-full left-0 right-0 mt-1 z-40 max-h-[280px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden">
+              <div className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-40 max-h-[280px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden">
                 <input
                   type="text"
                   autoFocus

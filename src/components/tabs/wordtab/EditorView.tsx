@@ -553,7 +553,7 @@ export const EditorView = forwardRef(function EditorView(
             onClick={() => setExportOpen((v) => !v)}
             onMouseDown={(e) => e.preventDefault()}
             title="Download / export"
-            className={`flex items-center gap-1 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
+            className={`clouds-coding-dropdown-button flex items-center gap-1 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
               exportOpen
                 ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
                 : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
@@ -564,7 +564,7 @@ export const EditorView = forwardRef(function EditorView(
             <ChevronDown className="w-3 h-3" />
           </button>
           {exportOpen && (
-            <div className="absolute top-full right-0 mt-1 z-30 min-w-[180px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
+            <div className="clouds-coding-dropdown-panel absolute top-full right-0 mt-1 z-30 min-w-[180px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
               {exportFormats.map((f) => (
                 <button
                   key={f.id}
@@ -679,7 +679,7 @@ export const EditorView = forwardRef(function EditorView(
             onClick={() => setPageOpen((v) => !v)}
             onMouseDown={(e) => e.preventDefault()}
             title="Page size"
-            className={`flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
+            className={`clouds-coding-dropdown-button flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
               pageOpen
                 ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
                 : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
@@ -694,7 +694,7 @@ export const EditorView = forwardRef(function EditorView(
             <ChevronDown className="w-3 h-3" />
           </button>
           {pageOpen && (
-            <div className="absolute top-full left-0 mt-1 z-30 min-w-[250px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
+            <div className="clouds-coding-dropdown-panel absolute top-full left-0 mt-1 z-30 min-w-[250px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
               {PAGE_LAYOUTS.map((layout) => (
                 <button
                   key={layout.id}
@@ -732,7 +732,7 @@ export const EditorView = forwardRef(function EditorView(
             onClick={() => setPageColorOpen((v) => !v)}
             onMouseDown={(e) => e.preventDefault()}
             title="Page Color"
-            className={`flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
+            className={`clouds-coding-dropdown-button flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
               pageColorOpen
                 ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
                 : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
@@ -747,7 +747,7 @@ export const EditorView = forwardRef(function EditorView(
             <ChevronDown className="w-3 h-3" />
           </button>
           {pageColorOpen && (
-            <div className="absolute top-full left-0 mt-1 z-30 min-w-[190px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
+            <div className="clouds-coding-dropdown-panel absolute top-full left-0 mt-1 z-30 min-w-[190px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
               {PAGE_COLORS.map((color) => (
                 <button
                   key={color.id}

@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Menu, Settings } from "lucide-react";
 
 interface CloudsLayoutProps {
   left?: ReactNode;
-  main: ReactNode;
+  main?: ReactNode;
+  mainStackTop?: ReactNode;
+  mainStackBottom?: ReactNode;
   right?: ReactNode;
   rightStackTop?: ReactNode;
   rightStackBottom?: ReactNode;
@@ -24,7 +32,7 @@ function BubblePanel({
 }) {
   return (
     <section
-      className={`min-h-0 min-w-0 rounded-[3rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] shadow-2xl overflow-hidden p-4 ${className}`}
+      className={`clouds-panel min-h-0 min-w-0 rounded-[3rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] overflow-hidden p-4 ${className}`}
     >
       <div
         className={`h-full min-h-0 min-w-0 overflow-hidden rounded-[2.35rem] ${innerClassName}`}
@@ -38,6 +46,8 @@ function BubblePanel({
 export function CloudsLayout({
   left,
   main,
+  mainStackTop,
+  mainStackBottom,
   right,
   rightStackTop,
   rightStackBottom,
@@ -45,22 +55,65 @@ export function CloudsLayout({
   onOpenMenu,
 }: CloudsLayoutProps) {
   const [navOpen, setNavOpen] = useState(false);
+  const menuBubbleRef = useRef<HTMLElement>(null);
+  const [menuCastHeight, setMenuCastHeight] = useState(0);
   const hasLeft = Boolean(left);
+  const hasMainStack = Boolean(mainStackTop || mainStackBottom);
   const hasRightStack = Boolean(rightStackTop || rightStackBottom);
   const hasRight = Boolean(right || hasRightStack);
+  const visibleSideCount = Number(hasLeft) + Number(hasRight);
 
   const gridTemplateColumns = useMemo(() => {
-    const side = hasLeft || hasRight ? "minmax(300px, 0.58fr)" : "minmax(0, 1fr)";
-    return `${side} minmax(980px, 1120px) ${side}`;
+    const side = "minmax(min(220px, 20vw), 0.64fr)";
+    const main = "minmax(min(560px, 58vw), 1.8fr)";
+    return [hasLeft ? side : null, main, hasRight ? side : null]
+      .filter(Boolean)
+      .join(" ");
   }, [hasLeft, hasRight]);
 
+  const clusterMaxWidth = useMemo(() => {
+    if (visibleSideCount === 2) return "1840px";
+    if (visibleSideCount === 1) return "1380px";
+    return "1040px";
+  }, [visibleSideCount]);
+
+  useEffect(() => {
+    if (!navOpen || !menuBubbleRef.current) {
+      setMenuCastHeight(0);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setMenuCastHeight(menuBubbleRef.current?.offsetHeight ?? 0);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [navOpen]);
+
   return (
-    <div className="fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden">
-      <div className="absolute top-5 left-5 z-30 flex items-center gap-3">
+    <div
+      className="clouds-shell fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden"
+    >
+      <div aria-hidden className="clouds-chrome-shadow-layer absolute inset-0 z-10 pointer-events-none">
+        <div className="absolute top-5 left-5 flex items-center gap-3">
+          <div className="clouds-menu-button-cast clouds-chrome-cast h-11 min-w-[112px] rounded-2xl" />
+          <div className="clouds-settings-button-cast clouds-chrome-cast h-11 w-11 rounded-full" />
+        </div>
+        <div
+          className={`clouds-menu-bubble-cast clouds-chrome-cast absolute left-5 top-[76px] w-[286px] max-w-[86vw] rounded-[2rem] transition-[opacity,transform,height] duration-200 ease-out ${
+            navOpen
+              ? "opacity-100 scale-100"
+              : "opacity-0 scale-95"
+          }`}
+          style={{ height: menuCastHeight }}
+        />
+      </div>
+
+      <div className="absolute top-5 left-5 z-50 flex items-center gap-3">
         <button
           type="button"
           onClick={() => setNavOpen((open) => !open)}
-          className="h-11 min-w-[112px] px-4 rounded-2xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center gap-2 select-none shadow-xl"
+          className="h-11 min-w-[112px] px-4 rounded-2xl border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center gap-2 select-none"
         >
           <Menu className="w-4 h-4" />
           <span className="text-[10px] font-bold tracking-widest uppercase">
@@ -70,7 +123,7 @@ export function CloudsLayout({
         <button
           type="button"
           onClick={onOpenMenu}
-          className="h-11 w-11 rounded-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center justify-center shadow-xl"
+          className="h-11 w-11 rounded-full border border-[var(--ch-border)] bg-[var(--ch-bg-base)] hover:bg-[var(--ch-bg-hover)] flex items-center justify-center"
           title="Settings"
         >
           <Settings className="w-4 h-4" />
@@ -79,45 +132,66 @@ export function CloudsLayout({
 
       {navOpen && (
         <div
-          className="fixed inset-0 z-20"
+          className="fixed inset-0 z-30"
           onClick={() => setNavOpen(false)}
         />
       )}
       <aside
-        className={`clouds-menu-bubble absolute left-5 top-[76px] z-30 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 shadow-2xl overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
+        ref={menuBubbleRef}
+        className={`clouds-menu-bubble absolute left-5 top-[76px] z-50 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
           navOpen
-            ? "max-h-[620px] opacity-100 scale-100 pointer-events-auto"
+            ? "max-h-[420px] opacity-100 scale-100 pointer-events-auto"
             : "max-h-0 opacity-0 scale-95 pointer-events-none"
         }`}
       >
         <div className="min-h-0 flex flex-col">{nav}</div>
       </aside>
 
-      <div className="h-full w-full px-8 pb-10 pt-20 flex items-center justify-center">
+      <div className="clouds-stage relative z-20 h-full w-full box-border flex items-center justify-center">
         <div
-          className="grid w-full max-w-[1840px] items-center gap-9 min-h-0"
-          style={{ gridTemplateColumns }}
+          className="clouds-grid grid w-full items-center justify-center min-h-0"
+          style={{ gridTemplateColumns, maxWidth: clusterMaxWidth }}
         >
           {hasLeft && (
             <BubblePanel
-              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              className="clouds-left-panel clouds-side-panel self-center rounded-[2.5rem]"
               innerClassName="clouds-side-bubble rounded-[1.85rem]"
             >
               {left}
             </BubblePanel>
           )}
-          {!hasLeft && <div aria-hidden className="min-w-0" />}
-          <BubblePanel
-            className="h-[min(92vh,980px)] max-h-[980px] rounded-[3.5rem]"
-            innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
-          >
-            {main}
-          </BubblePanel>
+          {hasMainStack ? (
+            <div className="clouds-main-stack clouds-main-height clouds-main-panel min-h-0 min-w-0 self-center flex flex-col">
+              {mainStackTop && (
+                <BubblePanel
+                  className="clouds-main-stack-top rounded-[2.65rem] p-3"
+                  innerClassName="clouds-main-bubble clouds-main-bubble-stack-top rounded-[1.9rem]"
+                >
+                  {mainStackTop}
+                </BubblePanel>
+              )}
+              {mainStackBottom && (
+                <BubblePanel
+                  className="flex-1 rounded-[2.85rem] p-3"
+                  innerClassName="clouds-main-bubble clouds-main-bubble-stack-bottom rounded-[2.05rem]"
+                >
+                  {mainStackBottom}
+                </BubblePanel>
+              )}
+            </div>
+          ) : (
+            <BubblePanel
+              className="clouds-main-panel rounded-[3.5rem]"
+              innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
+            >
+              {main}
+            </BubblePanel>
+          )}
           {hasRightStack ? (
-            <div className="h-[min(92vh,980px)] max-h-[980px] min-h-0 min-w-0 self-center flex flex-col gap-7">
+            <div className="clouds-right-stack clouds-main-height min-h-0 min-w-0 self-center flex flex-col">
               {rightStackTop && (
                 <BubblePanel
-                  className="h-[min(34vh,360px)] min-h-[310px] rounded-[2.35rem] p-3"
+                  className="clouds-stack-top rounded-[2.35rem] p-3"
                   innerClassName="clouds-side-bubble clouds-side-bubble-square rounded-[1.6rem]"
                 >
                   {rightStackTop}
@@ -134,13 +208,14 @@ export function CloudsLayout({
             </div>
           ) : hasRight ? (
             <BubblePanel
-              className="h-[min(62vh,620px)] self-center rounded-[2.5rem]"
+              className={`clouds-right-panel ${
+                hasMainStack ? "clouds-main-height" : "clouds-side-panel"
+              } self-center rounded-[2.5rem]`}
               innerClassName="clouds-side-bubble rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
             >
               {right}
             </BubblePanel>
           ) : null}
-          {!hasRight && <div aria-hidden className="min-w-0" />}
         </div>
       </div>
 
@@ -149,6 +224,138 @@ export function CloudsLayout({
           --clouds-main-child-radius: 1.45rem;
           --clouds-side-child-radius: 1.25rem;
           --clouds-menu-child-radius: 1.15rem;
+        }
+
+        [data-layout="clouds"] .clouds-shell {
+          --clouds-chrome-bottom: 4rem;
+          --clouds-stage-x: 2rem;
+          --clouds-stage-top: calc(var(--clouds-chrome-bottom) + var(--clouds-grid-gap));
+          --clouds-stage-bottom: calc(var(--clouds-stage-top) - var(--clouds-shadow-gutter));
+          --clouds-grid-gap: 2.25rem;
+          --clouds-shadow-gutter: 3.2rem;
+          --clouds-main-height: min(
+            calc(
+              100vh - var(--clouds-stage-top) - var(--clouds-stage-bottom) -
+                var(--clouds-shadow-gutter)
+            ),
+            980px
+          );
+          --clouds-side-height: min(
+            calc(72vh - var(--clouds-stage-top)),
+            620px
+          );
+          --clouds-stack-gap: 1.75rem;
+          --clouds-stack-top-height: min(34vh, 360px);
+          --clouds-stack-top-min: 310px;
+          --clouds-main-stack-top-height: min(18vh, 184px);
+          --clouds-main-stack-top-min: 160px;
+        }
+
+        [data-layout="clouds"] .clouds-stage {
+          padding: var(--clouds-stage-top) var(--clouds-stage-x)
+            var(--clouds-stage-bottom);
+        }
+
+        [data-layout="clouds"] .clouds-grid {
+          gap: var(--clouds-grid-gap);
+          padding-bottom: var(--clouds-shadow-gutter);
+        }
+
+        [data-layout="clouds"] .clouds-panel {
+          box-shadow:
+            0 72px 96px -28px rgba(77, 55, 20, 0.46),
+            0 34px 52px -16px rgba(77, 55, 20, 0.31),
+            0 12px 24px -10px rgba(77, 55, 20, 0.26);
+        }
+
+        [data-layout="clouds"] .clouds-chrome-cast {
+          box-shadow:
+            0 38px 58px -22px rgba(77, 55, 20, 0.46),
+            0 18px 34px -16px rgba(77, 55, 20, 0.31),
+            0 7px 16px -10px rgba(77, 55, 20, 0.26);
+        }
+
+        [data-layout="clouds"] .clouds-main-panel,
+        [data-layout="clouds"] .clouds-main-height {
+          height: var(--clouds-main-height);
+          max-height: var(--clouds-main-height);
+        }
+
+        [data-layout="clouds"] .clouds-side-panel {
+          height: var(--clouds-side-height);
+        }
+
+        [data-layout="clouds"] .clouds-right-stack {
+          gap: var(--clouds-stack-gap);
+        }
+
+        [data-layout="clouds"] .clouds-stack-top {
+          height: var(--clouds-stack-top-height);
+          min-height: var(--clouds-stack-top-min);
+        }
+
+        [data-layout="clouds"] .clouds-main-stack {
+          gap: var(--clouds-stack-gap);
+        }
+
+        [data-layout="clouds"] .clouds-main-stack-top {
+          height: var(--clouds-main-stack-top-height);
+          min-height: var(--clouds-main-stack-top-min);
+        }
+
+        @media (max-width: 1180px) {
+          [data-layout="clouds"] .clouds-shell {
+            overflow: auto;
+          }
+
+          [data-layout="clouds"] .clouds-stage {
+            min-height: 100%;
+            align-items: flex-start;
+            padding-top: 4.8rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-bottom: 4.8rem;
+          }
+
+          [data-layout="clouds"] .clouds-grid {
+            padding-bottom: 2.45rem;
+          }
+
+          [data-layout="clouds"] .clouds-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            max-width: 760px;
+          }
+
+          [data-layout="clouds"] .clouds-main-panel {
+            order: 1;
+            height: min(72vh, 760px);
+            max-height: none;
+          }
+
+          [data-layout="clouds"] .clouds-left-panel {
+            order: 2;
+          }
+
+          [data-layout="clouds"] .clouds-right-panel,
+          [data-layout="clouds"] .clouds-right-stack {
+            order: 3;
+          }
+
+          [data-layout="clouds"] .clouds-side-panel,
+          [data-layout="clouds"] .clouds-right-stack {
+            height: auto;
+            max-height: none;
+          }
+
+          [data-layout="clouds"] .clouds-stack-top {
+            height: auto;
+            min-height: 220px;
+          }
+
+          [data-layout="clouds"] .clouds-main-stack-top {
+            height: auto;
+            min-height: 160px;
+          }
         }
 
         [data-layout="clouds"] .clouds-main-bubble :is(div, section, aside, button, input, textarea, select)[class*="rounded-sm"] {
