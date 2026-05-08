@@ -1333,26 +1333,39 @@ function RecordList({
           >
             {record.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirmId === record.id) {
-                onRemove(record.id);
-                setConfirmId(null);
-              } else {
-                setConfirmId(record.id);
-              }
-            }}
-            onBlur={() => setConfirmId((curr) => (curr === record.id ? null : curr))}
-            title={confirmId === record.id ? "Click again to confirm" : "Delete search"}
-            className={`mt-0.5 p-1 rounded-sm hover:bg-[var(--ch-bg-base)] shrink-0 ${
-              confirmId === record.id
-                ? "text-[var(--ch-error)] opacity-100"
-                : "text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] opacity-60 group-hover:opacity-100"
-            }`}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          {confirmId !== record.id ? (
+            <button
+              type="button"
+              onClick={() => setConfirmId(record.id)}
+              title="Delete search"
+              className="mt-0.5 p-1 rounded-sm text-[var(--ch-text-faint)] hover:text-[var(--ch-error)] hover:bg-[var(--ch-bg-base)] shrink-0 opacity-60 group-hover:opacity-100"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div className="mt-0.5 flex items-center gap-1 text-[10px] shrink-0">
+              <span className="text-[var(--ch-error-text)] uppercase tracking-wider">
+                Delete?
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(record.id);
+                  setConfirmId(null);
+                }}
+                className="px-1.5 py-0.5 border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm uppercase tracking-wider transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmId(null)}
+                className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
+              >
+                No
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
