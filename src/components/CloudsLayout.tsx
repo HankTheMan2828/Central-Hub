@@ -17,6 +17,7 @@ interface CloudsLayoutProps {
   right?: ReactNode;
   rightStackTop?: ReactNode;
   rightStackBottom?: ReactNode;
+  mainSize?: "default" | "tall";
   nav: ReactNode;
   onOpenMenu: () => void;
 }
@@ -51,6 +52,7 @@ export function CloudsLayout({
   right,
   rightStackTop,
   rightStackBottom,
+  mainSize = "default",
   nav,
   onOpenMenu,
 }: CloudsLayoutProps) {
@@ -92,7 +94,9 @@ export function CloudsLayout({
 
   return (
     <div
-      className="clouds-shell fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden"
+      className={`clouds-shell ${
+        mainSize === "tall" ? "clouds-shell-main-tall" : ""
+      } fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden`}
     >
       <div aria-hidden className="clouds-chrome-shadow-layer absolute inset-0 z-10 pointer-events-none">
         <div className="absolute top-5 left-5 flex items-center gap-3">
@@ -251,6 +255,18 @@ export function CloudsLayout({
           --clouds-main-stack-top-min: 160px;
         }
 
+        [data-layout="clouds"] .clouds-shell-main-tall {
+          --clouds-main-vertical-margin: 1in;
+          --clouds-stage-top: var(--clouds-main-vertical-margin);
+          --clouds-stage-bottom: calc(
+            var(--clouds-main-vertical-margin) - var(--clouds-shadow-gutter)
+          );
+          --clouds-main-height: calc(
+            100vh - var(--clouds-stage-top) - var(--clouds-stage-bottom) -
+              var(--clouds-shadow-gutter)
+          );
+        }
+
         [data-layout="clouds"] .clouds-stage {
           padding: var(--clouds-stage-top) var(--clouds-stage-x)
             var(--clouds-stage-bottom);
@@ -317,6 +333,11 @@ export function CloudsLayout({
             padding-bottom: 4.8rem;
           }
 
+          [data-layout="clouds"] .clouds-shell-main-tall .clouds-stage {
+            padding-top: var(--clouds-main-vertical-margin);
+            padding-bottom: var(--clouds-main-vertical-margin);
+          }
+
           [data-layout="clouds"] .clouds-grid {
             padding-bottom: 2.45rem;
           }
@@ -330,6 +351,10 @@ export function CloudsLayout({
             order: 1;
             height: min(72vh, 760px);
             max-height: none;
+          }
+
+          [data-layout="clouds"] .clouds-shell-main-tall .clouds-main-panel {
+            height: var(--clouds-main-height);
           }
 
           [data-layout="clouds"] .clouds-left-panel {

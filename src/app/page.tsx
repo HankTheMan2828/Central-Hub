@@ -1339,6 +1339,11 @@ export default function Home() {
           right={cloudsRightContent}
           rightStackTop={cloudsRightStackTop}
           rightStackBottom={cloudsRightStackBottom}
+          mainSize={
+            activeNavTab === "word" || activeNavTab === "search"
+              ? "tall"
+              : "default"
+          }
           onOpenMenu={openSettingsMenu}
         />
       ) : (
