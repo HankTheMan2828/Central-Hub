@@ -502,6 +502,14 @@ export const EditorView = forwardRef(function EditorView(
     selection.addRange(range);
   }, []);
 
+  const focusEditorWithoutScroll = useCallback((target: HTMLElement) => {
+    try {
+      target.focus({ preventScroll: true });
+    } catch {
+      target.focus();
+    }
+  }, []);
+
   const getSelectionPageBlock = useCallback(() => {
     const node = localEditorRef.current;
     const selection = window.getSelection();
@@ -691,7 +699,7 @@ export const EditorView = forwardRef(function EditorView(
         const pointerInPage = positiveModulo(pointerY, pagePeriodPx);
         if (pointerInPage > writingAreaHeightPx) {
           e.preventDefault();
-          node.focus();
+          focusEditorWithoutScroll(node);
           const lastBlock = Array.from(node.children)
             .reverse()
             .find((child): child is HTMLElement => child instanceof HTMLElement);
@@ -705,11 +713,19 @@ export const EditorView = forwardRef(function EditorView(
       const isEmpty = !node.innerText.trim() && !node.querySelector("img, table");
       if (!isEmpty) return;
       e.preventDefault();
-      node.focus();
+      const scroller = node.closest(".word-editor-viewer");
+      const scrollTop = scroller?.scrollTop ?? 0;
+      const scrollLeft = scroller?.scrollLeft ?? 0;
+      focusEditorWithoutScroll(node);
       placeCaretAtStart();
+      if (scroller) {
+        scroller.scrollTop = scrollTop;
+        scroller.scrollLeft = scrollLeft;
+      }
     },
     [
       correctSelectionPageGap,
+      focusEditorWithoutScroll,
       pageFlow,
       pagePeriodPx,
       placeCaretAtEnd,
@@ -1068,7 +1084,7 @@ export const EditorView = forwardRef(function EditorView(
       )}
 
       <div
-        className="flex-1 overflow-auto px-8 py-8 min-w-0 bg-[var(--ch-bg-surface)]"
+        className="word-editor-viewer flex-1 overflow-auto px-8 py-8 min-w-0 bg-[var(--ch-bg-surface)]"
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("Files")) {
             e.preventDefault();
@@ -1080,9 +1096,10 @@ export const EditorView = forwardRef(function EditorView(
           e.preventDefault();
           onImport(file);
         }}
-        onClick={() => {
+        onClick={(e) => {
           if (typeof editorRef === "object" && editorRef?.current) {
-            editorRef.current.focus();
+            if (editorRef.current.contains(e.target as Node)) return;
+            focusEditorWithoutScroll(editorRef.current);
           }
         }}
       >
