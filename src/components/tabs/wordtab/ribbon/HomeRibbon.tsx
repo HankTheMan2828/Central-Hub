@@ -25,6 +25,8 @@ import {
   Outdent,
   Baseline,
   Highlighter,
+  Type,
+  Search,
 } from "lucide-react";
 import {
   ToolbarBtn,
@@ -32,13 +34,33 @@ import {
   DropdownButton,
   type FormatState,
 } from "./shared";
-import { TEXT_COLORS, HIGHLIGHT_COLORS } from "../pageOptions";
+import {
+  TEXT_COLORS,
+  HIGHLIGHT_COLORS,
+  FONT_FAMILIES,
+  FONT_SIZES_PT,
+  LINE_SPACING_PRESETS,
+  PARAGRAPH_SPACING_PRESETS,
+  STYLE_PRESETS,
+  type StylePreset,
+} from "../pageOptions";
 
 type Props = {
   exec: (cmd: string, value?: string) => void;
   applyHighlight: (color: string) => void;
-  onHeading: (tag: "H1" | "H2" | "P" | "BLOCKQUOTE") => void;
+  onHeading: (tag: "H1" | "H2" | "H3" | "P" | "BLOCKQUOTE") => void;
+  onStyle: (style: StylePreset) => void;
+  fontFamilyId: string;
+  fontSizePt: number;
+  lineSpacing: number;
+  paragraphSpacingBeforePt: number;
+  paragraphSpacingAfterPt: number;
+  onFontFamilyChange: (id: string) => void;
+  onFontSizeChange: (size: number) => void;
+  onFontSizeStep: (delta: number) => void;
+  onSpacingChange: (line: number, before: number, after: number) => void;
   onInsertLink: () => void;
+  onFindOpen: () => void;
   formatState: FormatState;
   canRestoreBackup: boolean;
   onRestoreBackup: () => void;
@@ -48,7 +70,18 @@ export function HomeRibbon({
   exec,
   applyHighlight,
   onHeading,
+  onStyle,
+  fontFamilyId,
+  fontSizePt,
+  lineSpacing,
+  paragraphSpacingBeforePt,
+  paragraphSpacingAfterPt,
+  onFontFamilyChange,
+  onFontSizeChange,
+  onFontSizeStep,
+  onSpacingChange,
   onInsertLink,
+  onFindOpen,
   formatState,
   canRestoreBackup,
   onRestoreBackup,
@@ -71,9 +104,80 @@ export function HomeRibbon({
     isAlignRight,
     isAlignJustify,
   } = formatState;
+  const fontFamily =
+    FONT_FAMILIES.find((font) => font.id === fontFamilyId) ?? FONT_FAMILIES[0];
 
   return (
     <>
+      <DropdownButton
+        title="Font family"
+        icon={<Type className="w-3 h-3" />}
+        label={fontFamily.label}
+        panelClass="min-w-[190px]"
+      >
+        {(close) => (
+          <>
+            {FONT_FAMILIES.map((font) => (
+              <button
+                key={font.id}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  close();
+                  onFontFamilyChange(font.id);
+                }}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left font-mono transition-colors ${
+                  font.id === fontFamily.id
+                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+                }`}
+              >
+                <span className="text-[11px] truncate" style={{ fontFamily: font.stack }}>
+                  {font.label}
+                </span>
+              </button>
+            ))}
+          </>
+        )}
+      </DropdownButton>
+
+      <DropdownButton
+        title="Font size"
+        label={`${fontSizePt} pt`}
+        panelClass="min-w-[92px] max-h-[260px] overflow-auto"
+      >
+        {(close) => (
+          <>
+            {FONT_SIZES_PT.map((size) => (
+              <button
+                key={size}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  close();
+                  onFontSizeChange(size);
+                }}
+                className={`w-full px-3 py-1.5 text-left text-[11px] font-mono transition-colors ${
+                  size === fontSizePt
+                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </>
+        )}
+      </DropdownButton>
+      <ToolbarBtn title="Grow font" onClick={() => onFontSizeStep(1)}>
+        <span className="text-[10px] font-mono">A+</span>
+      </ToolbarBtn>
+      <ToolbarBtn title="Shrink font" onClick={() => onFontSizeStep(-1)}>
+        <span className="text-[10px] font-mono">A-</span>
+      </ToolbarBtn>
+
+      <Divider />
+
       {/* Inline formatting */}
       <ToolbarBtn title="Bold (Ctrl+B)" onClick={() => exec("bold")} active={isBold}>
         <Bold className="w-3.5 h-3.5" />
@@ -169,6 +273,30 @@ export function HomeRibbon({
       <Divider />
 
       {/* Block / style picker */}
+      <DropdownButton
+        title="Styles"
+        label="Styles"
+        panelClass="min-w-[170px]"
+      >
+        {(close) => (
+          <>
+            {STYLE_PRESETS.map((style) => (
+              <button
+                key={style.id}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  close();
+                  onStyle(style);
+                }}
+                className="w-full px-3 py-2 text-left text-[11px] font-mono text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)] transition-colors"
+              >
+                {style.label}
+              </button>
+            ))}
+          </>
+        )}
+      </DropdownButton>
       <ToolbarBtn title="Heading 1 (Ctrl+1)" onClick={() => onHeading("H1")} active={isH1}>
         <Heading1 className="w-3.5 h-3.5" />
       </ToolbarBtn>
@@ -185,6 +313,61 @@ export function HomeRibbon({
       <ToolbarBtn title="Block quote" onClick={() => onHeading("BLOCKQUOTE")} active={isQuote}>
         <Quote className="w-3.5 h-3.5" />
       </ToolbarBtn>
+
+      <Divider />
+
+      <DropdownButton
+        title="Line and paragraph spacing"
+        label="Spacing"
+        panelClass="min-w-[190px]"
+      >
+        {(close) => (
+          <div className="py-1">
+            {LINE_SPACING_PRESETS.map((line) => (
+              <button
+                key={line}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  close();
+                  onSpacingChange(
+                    line,
+                    paragraphSpacingBeforePt,
+                    paragraphSpacingAfterPt
+                  );
+                }}
+                className={`w-full px-3 py-1.5 text-left text-[11px] font-mono transition-colors ${
+                  line === lineSpacing
+                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+                }`}
+              >
+                Line {line}
+              </button>
+            ))}
+            <div className="h-px bg-[var(--ch-border-subtle)] my-1" />
+            {PARAGRAPH_SPACING_PRESETS.map((spacing) => (
+              <button
+                key={spacing.label}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  close();
+                  onSpacingChange(lineSpacing, spacing.before, spacing.after);
+                }}
+                className={`w-full px-3 py-1.5 text-left text-[11px] font-mono transition-colors ${
+                  spacing.before === paragraphSpacingBeforePt &&
+                  spacing.after === paragraphSpacingAfterPt
+                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+                }`}
+              >
+                {spacing.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </DropdownButton>
 
       <Divider />
 
@@ -250,6 +433,9 @@ export function HomeRibbon({
       </ToolbarBtn>
       <ToolbarBtn title="Clear formatting" onClick={() => exec("removeFormat")}>
         <RemoveFormatting className="w-3.5 h-3.5" />
+      </ToolbarBtn>
+      <ToolbarBtn title="Find and replace (Ctrl+F)" onClick={onFindOpen}>
+        <Search className="w-3.5 h-3.5" />
       </ToolbarBtn>
 
       <Divider />

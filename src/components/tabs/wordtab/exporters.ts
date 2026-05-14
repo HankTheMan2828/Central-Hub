@@ -1,4 +1,4 @@
-export type ExportFormat = "md" | "html" | "txt" | "pdf";
+export type ExportFormat = "md" | "html" | "txt" | "rtf" | "pdf";
 
 function sanitizeFilename(title: string): string {
   const cleaned = (title || "untitled")
@@ -35,6 +35,22 @@ function downloadBlob(
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function textWithPageBreaks(editor: HTMLElement): string {
+  const clone = editor.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll<HTMLElement>("[data-word-page-break]").forEach((el) => {
+    el.replaceWith(document.createTextNode("\n\n----\n\n"));
+  });
+  return clone.innerText || clone.textContent || "";
+}
+
+function escapeRtf(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/{/g, "\\{")
+    .replace(/}/g, "\\}")
+    .replace(/\n/g, "\\par\n");
+}
+
 export function htmlToMarkdown(root: HTMLElement): string {
   function walk(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -56,6 +72,11 @@ export function htmlToMarkdown(root: HTMLElement): string {
         return `${child.trim()}\n\n`;
       case "br":
         return "  \n";
+      case "s":
+      case "del":
+        return `~~${child}~~`;
+      case "mark":
+        return `<mark>${child}</mark>`;
       case "strong":
       case "b":
         return `**${child}**`;
@@ -94,6 +115,7 @@ export function htmlToMarkdown(root: HTMLElement): string {
       case "li":
         return child;
       case "div":
+        if (el.dataset.wordPageBreak) return "\n\n---\n\n";
         return child + (child.endsWith("\n") ? "" : "\n");
       default:
         return child;
@@ -158,6 +180,7 @@ ul, ol { padding-left: 24px; }
 li { margin: 0.2em 0; }
 p { margin: 0 0 0.6em; }
 a { color: #1a73e8; }
+[data-word-page-break] { break-before: page; page-break-before: always; }
 </style>
 </head>
 <body>
@@ -199,8 +222,14 @@ export function exportDoc(
       return;
     }
     case "txt": {
-      const txt = `${docTitle}\n\n${editor.innerText || ""}`;
+      const txt = `${docTitle}\n\n${textWithPageBreaks(editor)}`;
       downloadBlob(txt, `${filename}.txt`, "text/plain;charset=utf-8");
+      return;
+    }
+    case "rtf": {
+      const text = escapeRtf(textWithPageBreaks(editor));
+      const rtf = `{\\rtf1\\ansi\\deff0\n{\\fonttbl{\\f0 Segoe UI;}}\n\\f0\\fs22 ${text}\n}`;
+      downloadBlob(rtf, `${filename}.rtf`, "application/rtf;charset=utf-8");
       return;
     }
     case "pdf": {

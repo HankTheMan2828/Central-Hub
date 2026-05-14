@@ -1,13 +1,29 @@
 "use client";
 
+import { Eye, Pilcrow } from "lucide-react";
+import { DropdownButton } from "./shared";
+
 export type PageFlow = "vertical" | "horizontal";
 
 type Props = {
   pageFlow: PageFlow;
   onPageFlowChange: (flow: PageFlow) => void;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+  showFormatting: boolean;
+  onShowFormattingChange: (show: boolean) => void;
 };
 
-export function ViewRibbon({ pageFlow, onPageFlowChange }: Props) {
+const ZOOM_LEVELS = [50, 75, 90, 100, 125, 150, 200];
+
+export function ViewRibbon({
+  pageFlow,
+  onPageFlowChange,
+  zoom,
+  onZoomChange,
+  showFormatting,
+  onShowFormattingChange,
+}: Props) {
   return (
     <>
       <span className="text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono mr-1">
@@ -42,9 +58,48 @@ export function ViewRibbon({ pageFlow, onPageFlowChange }: Props) {
         </button>
       </div>
 
-      <span className="text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono ml-2">
-        Zoom / Ruler / Formatting marks coming soon
-      </span>
+      <DropdownButton
+        title="Zoom"
+        icon={<Eye className="w-3 h-3" />}
+        label={`${zoom}%`}
+        panelClass="min-w-[100px]"
+      >
+        {(close) => (
+          <>
+            {ZOOM_LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => {
+                  close();
+                  onZoomChange(level);
+                }}
+                className={`w-full px-3 py-2 text-left text-[11px] font-mono transition-colors ${
+                  level === zoom
+                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+                }`}
+              >
+                {level}%
+              </button>
+            ))}
+          </>
+        )}
+      </DropdownButton>
+
+      <button
+        type="button"
+        title="Show formatting marks"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onShowFormattingChange(!showFormatting)}
+        className={`h-7 w-7 flex items-center justify-center border rounded-sm transition-colors ${
+          showFormatting
+            ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+            : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
+        }`}
+      >
+        <Pilcrow className="w-3.5 h-3.5" />
+      </button>
     </>
   );
 }

@@ -5,7 +5,32 @@ export type PageLayout = {
   width: string;
   height: string;
   margin: string;
-  columns: 1 | 2;
+  columns: 1 | 2 | 3;
+};
+
+export type MarginPreset = {
+  id: string;
+  label: string;
+  meta: string;
+  margins: {
+    top: string;
+    right: string;
+    bottom: string;
+    left: string;
+  };
+};
+
+export type FontFamily = {
+  id: string;
+  label: string;
+  stack: string;
+};
+
+export type StylePreset = {
+  id: "title" | "subtitle" | "h1" | "h2" | "h3" | "p" | "quote";
+  label: string;
+  tag: "H1" | "H2" | "H3" | "P" | "BLOCKQUOTE";
+  className?: string;
 };
 
 export type PageColor = {
@@ -168,4 +193,91 @@ export const HIGHLIGHT_COLORS: { label: string; value: string }[] = [
   { label: "Red", value: "#fecaca" },
   { label: "Orange", value: "#fed7aa" },
   { label: "Grey", value: "#e5e7eb" },
+];
+
+export const FONT_FAMILIES: FontFamily[] = [
+  {
+    id: "sans",
+    label: "Sans serif",
+    stack: '-apple-system, "Segoe UI", system-ui, sans-serif',
+  },
+  {
+    id: "serif",
+    label: "Serif",
+    stack: 'Georgia, "Times New Roman", serif',
+  },
+  {
+    id: "mono",
+    label: "Monospace",
+    stack: '"JetBrains Mono", Consolas, monospace',
+  },
+  {
+    id: "calibri",
+    label: "Calibri",
+    stack: 'Calibri, "Segoe UI", system-ui, sans-serif',
+  },
+  {
+    id: "cambria",
+    label: "Cambria",
+    stack: "Cambria, Georgia, serif",
+  },
+  {
+    id: "courier",
+    label: "Courier",
+    stack: '"Courier New", Courier, monospace',
+  },
+];
+
+export const FONT_SIZES_PT = [
+  8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72,
+];
+
+export const MARGIN_PRESETS: MarginPreset[] = [
+  {
+    id: "normal",
+    label: "Normal",
+    meta: '1" all',
+    margins: { top: "1in", right: "1in", bottom: "1in", left: "1in" },
+  },
+  {
+    id: "narrow",
+    label: "Narrow",
+    meta: '0.5" all',
+    margins: { top: "0.5in", right: "0.5in", bottom: "0.5in", left: "0.5in" },
+  },
+  {
+    id: "moderate",
+    label: "Moderate",
+    meta: '1" x 0.75"',
+    margins: { top: "1in", right: "0.75in", bottom: "1in", left: "0.75in" },
+  },
+  {
+    id: "wide",
+    label: "Wide",
+    meta: '1" x 2"',
+    margins: { top: "1in", right: "2in", bottom: "1in", left: "2in" },
+  },
+];
+
+export const LINE_SPACING_PRESETS = [1, 1.15, 1.5, 2];
+
+export const PARAGRAPH_SPACING_PRESETS = [
+  { label: "Compact", before: 0, after: 0 },
+  { label: "Word", before: 0, after: 8 },
+  { label: "Roomy", before: 6, after: 12 },
+];
+
+export const STYLE_PRESETS: StylePreset[] = [
+  { id: "title", label: "Title", tag: "H1", className: "word-style-title" },
+  {
+    id: "subtitle",
+    label: "Subtitle",
+    tag: "P",
+    className: "word-style-subtitle",
+  },
+  { id: "h1", label: "Heading 1", tag: "H1" },
+  { id: "h2", label: "Heading 2", tag: "H2" },
+  { id: "h3", label: "Heading 3", tag: "H3" },
+  { id: "p", label: "Paragraph", tag: "P" },
+  { id: "quote", label: "Quote", tag: "BLOCKQUOTE" },
 ];

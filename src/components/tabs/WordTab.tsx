@@ -11,23 +11,34 @@ import {
   createDoc,
   deleteDoc,
   duplicateDoc,
-  getLatestBackupForDoc,
-  listDocs,
-  loadStore,
-  saveStore,
-  setActive,
-  updateDoc,
+  getActiveDocPath,
+  getWorkingDir,
+  listBackups,
+  migrateLegacyDocs,
+  readBackup,
+  readDoc,
+  setActiveDocPath,
+  writeDoc,
 } from "./wordtab/docStore";
-import type { DocStoreState } from "./wordtab/types";
+import type { BackupEntry, WordDoc } from "./wordtab/types";
 import {
   exportDoc,
   htmlToMarkdown,
   type ExportFormat,
 } from "./wordtab/exporters";
+import { importFile, sanitizeHtml } from "./wordtab/importers";
 
 const SAVE_DEBOUNCE_MS = 600;
 const DEFAULT_PAGE_LAYOUT_ID = "letter";
 const DEFAULT_PAGE_COLOR_ID = "theme";
+const DEFAULT_ORIENTATION = "portrait";
+const DEFAULT_MARGINS_ID = "normal";
+const DEFAULT_COLUMNS = 1;
+const DEFAULT_FONT_FAMILY_ID = "sans";
+const DEFAULT_FONT_SIZE_PT = 11;
+const DEFAULT_LINE_SPACING = 1.15;
+const DEFAULT_PARAGRAPH_BEFORE_PT = 0;
+const DEFAULT_PARAGRAPH_AFTER_PT = 8;
 
 async function pushWordDocToMain(content: string): Promise<void> {
   if (typeof window === "undefined") return;
@@ -39,8 +50,8 @@ async function pushWordDocToMain(content: string): Promise<void> {
   }
 }
 
-function emptyState(): DocStoreState {
-  return { version: 2, activeId: null, docs: {} };
+function defaultColumnsForLayout(pageLayoutId?: string): 1 | 2 | 3 {
+  return pageLayoutId === "letter-landscape-columns" ? 2 : DEFAULT_COLUMNS;
 }
 
 function countWords(text: string): number {
@@ -63,6 +74,12 @@ function formatRelative(ts: number): string {
 
 function cleanEditorHtml(editor: HTMLElement): string {
   const clone = editor.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll<HTMLElement>("mark[data-word-find]").forEach((el) => {
+    const parent = el.parentNode;
+    if (!parent) return;
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    el.remove();
+  });
   clone.querySelectorAll<HTMLElement>("[data-word-auto-break]").forEach((el) => {
     el.style.marginTop = el.dataset.wordOriginalMarginTop ?? "";
     if (!el.getAttribute("style")) {
@@ -81,6 +98,10 @@ function htmlToPlainText(html: string): string {
   return (tmp.innerText || tmp.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+function htmlToSnippet(html: string): string {
+  return htmlToPlainText(html).slice(0, 140);
+}
+
 type Props = {
   subTab: WordSubTabId;
   onSubTabChange: (id: WordSubTabId) => void;
@@ -97,38 +118,120 @@ export function WordTab({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-  const storeRef = useRef<DocStoreState>(emptyState());
+  const activeDocRef = useRef<WordDoc | null>(null);
+  const activeDocPathRef = useRef<string | null>(null);
   const aiPanelRef = useRef<AIPanelHandle | null>(null);
   const pageLayoutRef = useRef(DEFAULT_PAGE_LAYOUT_ID);
   const pageColorRef = useRef(DEFAULT_PAGE_COLOR_ID);
+  const orientationRef = useRef<"portrait" | "landscape">(DEFAULT_ORIENTATION);
+  const marginsIdRef = useRef(DEFAULT_MARGINS_ID);
+  const columnsRef = useRef<1 | 2 | 3>(DEFAULT_COLUMNS);
+  const fontFamilyIdRef = useRef(DEFAULT_FONT_FAMILY_ID);
+  const fontSizePtRef = useRef(DEFAULT_FONT_SIZE_PT);
+  const lineSpacingRef = useRef(DEFAULT_LINE_SPACING);
+  const paragraphSpacingBeforePtRef = useRef(DEFAULT_PARAGRAPH_BEFORE_PT);
+  const paragraphSpacingAfterPtRef = useRef(DEFAULT_PARAGRAPH_AFTER_PT);
 
-  const [store, setStore] = useState<DocStoreState>(emptyState());
+  const [activeDoc, setActiveDoc] = useState<WordDoc | null>(null);
+  const [activeDocPath, setActivePathState] = useState<string | null>(null);
+  const [workingDir, setWorkingDirState] = useState<string | null>(null);
+  const [refreshSaves, setRefreshSaves] = useState(0);
   const [title, setTitle] = useState("Untitled document");
   const [pageLayoutId, setPageLayoutId] = useState(DEFAULT_PAGE_LAYOUT_ID);
   const [pageColorId, setPageColorId] = useState(DEFAULT_PAGE_COLOR_ID);
+  const [orientation, setOrientation] =
+    useState<"portrait" | "landscape">(DEFAULT_ORIENTATION);
+  const [marginsId, setMarginsId] = useState(DEFAULT_MARGINS_ID);
+  const [columns, setColumns] = useState<1 | 2 | 3>(DEFAULT_COLUMNS);
+  const [fontFamilyId, setFontFamilyId] = useState(DEFAULT_FONT_FAMILY_ID);
+  const [fontSizePt, setFontSizePt] = useState(DEFAULT_FONT_SIZE_PT);
+  const [lineSpacing, setLineSpacing] = useState(DEFAULT_LINE_SPACING);
+  const [paragraphSpacingBeforePt, setParagraphSpacingBeforePt] = useState(
+    DEFAULT_PARAGRAPH_BEFORE_PT
+  );
+  const [paragraphSpacingAfterPt, setParagraphSpacingAfterPt] = useState(
+    DEFAULT_PARAGRAPH_AFTER_PT
+  );
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [, setTick] = useState(0);
   const [stats, setStats] = useState({ words: 0, chars: 0 });
   const [isSaving, setIsSaving] = useState(false);
   const [backupTick, setBackupTick] = useState(0);
+  const [latestBackup, setLatestBackup] = useState<BackupEntry | null>(null);
   const [pendingOpen, setPendingOpen] = useState<
-    { id: string; title: string; hadMessages: boolean } | null
+    { path: string; title: string; hadMessages: boolean } | null
   >(null);
   const [aiPortalTarget, setAiPortalTarget] = useState<HTMLElement | null>(null);
   const [savesPortalTarget, setSavesPortalTarget] = useState<HTMLElement | null>(
     null
   );
-  const hydratedDocRef = useRef<string | null>(null);
 
-  const commitStore = useCallback((next: DocStoreState) => {
-    storeRef.current = next;
-    setStore(next);
-    saveStore(next);
+  const setActivePath = useCallback((path: string | null) => {
+    activeDocPathRef.current = path;
+    setActivePathState(path);
+    setActiveDocPath(path);
   }, []);
 
-  const rememberBackup = useCallback((doc: DocStoreState["docs"][string], reason: string) => {
-    backupDoc(doc, reason);
+  const applyDoc = useCallback(
+    (doc: WordDoc | null, path: string | null) => {
+      activeDocRef.current = doc;
+      setActiveDoc(doc);
+      setActivePath(path);
+      if (!editorRef.current) return;
+      if (!doc) {
+        editorRef.current.innerHTML = "";
+        setTitle("Untitled document");
+        setSavedAt(null);
+        setStats({ words: 0, chars: 0 });
+        return;
+      }
+      editorRef.current.innerHTML = doc.html;
+      setTitle(doc.title);
+      const nextPageLayoutId = doc.pageLayoutId ?? DEFAULT_PAGE_LAYOUT_ID;
+      const nextPageColorId = doc.pageColorId ?? DEFAULT_PAGE_COLOR_ID;
+      const nextOrientation = doc.orientation ?? DEFAULT_ORIENTATION;
+      const nextMarginsId = doc.marginsId ?? DEFAULT_MARGINS_ID;
+      const nextColumns = doc.columns ?? defaultColumnsForLayout(nextPageLayoutId);
+      const nextFontFamilyId = doc.fontFamilyId ?? DEFAULT_FONT_FAMILY_ID;
+      const nextFontSizePt = doc.fontSizePt ?? DEFAULT_FONT_SIZE_PT;
+      const nextLineSpacing = doc.lineSpacing ?? DEFAULT_LINE_SPACING;
+      const nextParagraphBefore =
+        doc.paragraphSpacingBeforePt ?? DEFAULT_PARAGRAPH_BEFORE_PT;
+      const nextParagraphAfter =
+        doc.paragraphSpacingAfterPt ?? DEFAULT_PARAGRAPH_AFTER_PT;
+      pageLayoutRef.current = nextPageLayoutId;
+      pageColorRef.current = nextPageColorId;
+      orientationRef.current = nextOrientation;
+      marginsIdRef.current = nextMarginsId;
+      columnsRef.current = nextColumns;
+      fontFamilyIdRef.current = nextFontFamilyId;
+      fontSizePtRef.current = nextFontSizePt;
+      lineSpacingRef.current = nextLineSpacing;
+      paragraphSpacingBeforePtRef.current = nextParagraphBefore;
+      paragraphSpacingAfterPtRef.current = nextParagraphAfter;
+      setPageLayoutId(nextPageLayoutId);
+      setPageColorId(nextPageColorId);
+      setOrientation(nextOrientation);
+      setMarginsId(nextMarginsId);
+      setColumns(nextColumns);
+      setFontFamilyId(nextFontFamilyId);
+      setFontSizePt(nextFontSizePt);
+      setLineSpacing(nextLineSpacing);
+      setParagraphSpacingBeforePt(nextParagraphBefore);
+      setParagraphSpacingAfterPt(nextParagraphAfter);
+      setSavedAt(doc.updatedAt);
+      const text = editorRef.current.innerText ?? "";
+      setStats({ words: countWords(text), chars: text.length });
+      pushWordDocToMain(htmlToMarkdown(editorRef.current)).catch(() => {});
+    },
+    [setActivePath]
+  );
+
+  const rememberBackup = useCallback(async (doc: WordDoc, reason: string) => {
+    const path = activeDocPathRef.current;
+    if (!path) return;
+    await backupDoc(doc, path, reason);
     setBackupTick((tick) => tick + 1);
   }, []);
 
@@ -137,87 +240,63 @@ export function WordTab({
     setStats({ words: countWords(text), chars: text.length });
   }, []);
 
-  const hydrateEditor = useCallback((id: string | null) => {
-    if (!editorRef.current) return;
-    if (!id) {
-      hydratedDocRef.current = null;
-      editorRef.current.innerHTML = "";
-      setTitle("Untitled document");
-      pageLayoutRef.current = DEFAULT_PAGE_LAYOUT_ID;
-      pageColorRef.current = DEFAULT_PAGE_COLOR_ID;
-      setPageLayoutId(DEFAULT_PAGE_LAYOUT_ID);
-      setPageColorId(DEFAULT_PAGE_COLOR_ID);
-      setSavedAt(null);
-      setStats({ words: 0, chars: 0 });
-      return;
-    }
-    const doc = storeRef.current.docs[id];
-    if (!doc) return;
-    hydratedDocRef.current = id;
-    editorRef.current.innerHTML = doc.html;
-    setTitle(doc.title);
-    const nextPageLayoutId = doc.pageLayoutId ?? DEFAULT_PAGE_LAYOUT_ID;
-    const nextPageColorId = doc.pageColorId ?? DEFAULT_PAGE_COLOR_ID;
-    pageLayoutRef.current = nextPageLayoutId;
-    pageColorRef.current = nextPageColorId;
-    setPageLayoutId(nextPageLayoutId);
-    setPageColorId(nextPageColorId);
-    setSavedAt(doc.updatedAt);
-    const text = editorRef.current.innerText ?? "";
-    setStats({ words: countWords(text), chars: text.length });
-  }, []);
-
-  const flushSave = useCallback(() => {
+  const flushSave = useCallback(async () => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    const id = storeRef.current.activeId;
-    if (!id) {
+    const path = activeDocPathRef.current;
+    const existing = activeDocRef.current;
+    if (!path || !existing || !editorRef.current) {
       setIsSaving(false);
       return;
     }
-    if (hydratedDocRef.current !== id) {
-      setIsSaving(false);
-      return;
-    }
-    if (!editorRef.current) {
-      setIsSaving(false);
-      return;
-    }
-    const existing = storeRef.current.docs[id];
     const html = cleanEditorHtml(editorRef.current);
-    const existingText = existing ? htmlToPlainText(existing.html) : "";
+    const existingText = htmlToPlainText(existing.html);
     const nextText = htmlToPlainText(html);
-    if (existing && existingText && !nextText) {
-      rememberBackup(existing, "blocked-empty-save");
+    if (existingText && !nextText) {
+      await rememberBackup(existing, "blocked-empty-save");
       setIsSaving(false);
       return;
     }
-    if (existing && existing.html !== html && existingText) {
-      rememberBackup(existing, "before-save");
+    if (existing.html !== html && existingText) {
+      await rememberBackup(existing, "before-save");
     }
-    const next = updateDoc(storeRef.current, id, {
-      html,
+    const updated: WordDoc = {
+      ...existing,
       title,
+      html,
       pageLayoutId: pageLayoutRef.current,
       pageColorId: pageColorRef.current,
-    });
-    commitStore(next);
-    setSavedAt(next.docs[id].updatedAt);
+      orientation: orientationRef.current,
+      marginsId: marginsIdRef.current,
+      columns: columnsRef.current,
+      fontFamilyId: fontFamilyIdRef.current,
+      fontSizePt: fontSizePtRef.current,
+      lineSpacing: lineSpacingRef.current,
+      paragraphSpacingBeforePt: paragraphSpacingBeforePtRef.current,
+      paragraphSpacingAfterPt: paragraphSpacingAfterPtRef.current,
+      snippet: htmlToSnippet(html),
+      updatedAt: Date.now(),
+    };
+    const result = await writeDoc(updated, path);
+    activeDocRef.current = updated;
+    setActiveDoc(updated);
+    setActivePath(result.path);
+    setSavedAt(updated.updatedAt);
     setIsSaving(false);
-  }, [title, commitStore, rememberBackup]);
+    setRefreshSaves((tick) => tick + 1);
+    pushWordDocToMain(htmlToMarkdown(editorRef.current)).catch(() => {});
+  }, [rememberBackup, setActivePath, title]);
 
   const handleEditorRef = useCallback(
     (node: HTMLDivElement | null) => {
       editorRef.current = node;
-      if (!node || !hydrated) return;
-      const activeId = storeRef.current.activeId;
-      if (hydratedDocRef.current !== activeId) {
-        hydrateEditor(activeId);
+      if (node && activeDocRef.current) {
+        applyDoc(activeDocRef.current, activeDocPathRef.current);
       }
     },
-    [hydrated, hydrateEditor]
+    [applyDoc]
   );
 
   const scheduleSave = useCallback(() => {
@@ -226,82 +305,87 @@ export function WordTab({
       window.clearTimeout(saveTimerRef.current);
     }
     setIsSaving(true);
-    saveTimerRef.current = window.setTimeout(flushSave, SAVE_DEBOUNCE_MS);
+    saveTimerRef.current = window.setTimeout(() => {
+      flushSave().catch(() => setIsSaving(false));
+    }, SAVE_DEBOUNCE_MS);
   }, [flushSave, hydrated]);
 
-  // Initial hydration. No auto-create: if there's no active doc the user
-  // should land in Saves and pick one (or hit + to make one).
   useEffect(() => {
-    const s = loadStore();
-    storeRef.current = s;
-    setStore(s);
-    if (s.activeId && s.docs[s.activeId]) {
-      hydrateEditor(s.activeId);
-    } else {
-      onSubTabChange("saves");
-    }
-    setHydrated(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        await migrateLegacyDocs();
+        const dir = await getWorkingDir();
+        if (cancelled) return;
+        setWorkingDirState(dir);
+        const rememberedPath = getActiveDocPath();
+        if (rememberedPath) {
+          const result = await readDoc(rememberedPath);
+          if (!cancelled && result.doc) {
+            applyDoc(result.doc, result.path);
+          } else if (!cancelled) {
+            onSubTabChange("saves");
+          }
+        } else if (!cancelled) {
+          onSubTabChange("saves");
+        }
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!aiPortalId) {
-      return;
-    }
+    if (!aiPortalId) return;
     const syncTarget = () => setAiPortalTarget(document.getElementById(aiPortalId));
     const frame = window.requestAnimationFrame(syncTarget);
     return () => window.cancelAnimationFrame(frame);
   }, [aiPortalId]);
 
   useEffect(() => {
-    if (!savesPortalId) {
-      return;
-    }
+    if (!savesPortalId) return;
     const syncTarget = () =>
       setSavesPortalTarget(document.getElementById(savesPortalId));
     const frame = window.requestAnimationFrame(syncTarget);
     return () => window.cancelAnimationFrame(frame);
   }, [savesPortalId]);
 
-  // Keep "Saved Xm ago" fresh.
   useEffect(() => {
     const handle = window.setInterval(() => setTick((t) => t + 1), 30000);
     return () => window.clearInterval(handle);
   }, []);
 
-  // Save on title change.
   useEffect(() => {
     scheduleSave();
   }, [title, scheduleSave]);
 
-  // Final flush on unmount so we never lose the last edit.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!activeDocPath) {
+        setLatestBackup(null);
+        return;
+      }
+      const backups = await listBackups(activeDocPath);
+      if (!cancelled) setLatestBackup(backups[0] ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDocPath, backupTick]);
+
   useEffect(() => {
     return () => {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
-        const id = storeRef.current.activeId;
-        if (id && editorRef.current && hydratedDocRef.current === id) {
-          const html = cleanEditorHtml(editorRef.current);
-          const existing = storeRef.current.docs[id];
-          const existingText = existing ? htmlToPlainText(existing.html) : "";
-          const nextText = htmlToPlainText(html);
-          if (existing && existingText && !nextText) {
-            backupDoc(existing, "blocked-empty-unmount-save");
-            return;
-          }
-          if (existing?.html && existing.html !== html) {
-            backupDoc(existing, "before-unmount-save");
-          }
-          const next = updateDoc(storeRef.current, id, {
-            html,
-            pageLayoutId: pageLayoutRef.current,
-            pageColorId: pageColorRef.current,
-          });
-          saveStore(next);
-        }
+        flushSave().catch(() => {});
       }
     };
-  }, []);
+  }, [flushSave]);
 
   const exec = useCallback(
     (command: string, value?: string) => {
@@ -318,14 +402,16 @@ export function WordTab({
     scheduleSave();
   }, [refreshStats, scheduleSave]);
 
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      const text = e.clipboardData.getData("text/plain");
-      document.execCommand("insertText", false, text);
-    },
-    []
-  );
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData("text/html");
+    if (html) {
+      document.execCommand("insertHTML", false, sanitizeHtml(html));
+      return;
+    }
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  }, []);
 
   const handleSelection = useCallback(() => {
     setTick((t) => t + 1);
@@ -349,55 +435,104 @@ export function WordTab({
     [scheduleSave]
   );
 
-  // Switch implementation, shared by confirm + same-doc paths. Flushes
-  // the current doc, swaps active, and rehydrates the editor.
-  const performOpen = useCallback(
-    (id: string) => {
-      if (id !== storeRef.current.activeId) {
-        flushSave();
-        const next = setActive(storeRef.current, id);
-        commitStore(next);
-        hydrateEditor(id);
-      }
-      onSubTabChange("editor");
+  const handleOrientationChange = useCallback(
+    (next: "portrait" | "landscape") => {
+      orientationRef.current = next;
+      setOrientation(next);
+      scheduleSave();
     },
-    [flushSave, commitStore, hydrateEditor, onSubTabChange]
+    [scheduleSave]
   );
 
-  // Clicking a different doc opens a confirmation that bundles the
-  // switch with a chat-continuity choice. Same-doc clicks fall through
-  // to the existing direct path. First-doc opens (no active doc) skip
-  // the modal: there's nothing to switch from.
-  const handleOpen = useCallback(
+  const handleMarginsChange = useCallback(
     (id: string) => {
-      const currentId = storeRef.current.activeId;
-      if (currentId && id !== currentId) {
-        const target = storeRef.current.docs[id];
-        if (!target) return;
+      marginsIdRef.current = id;
+      setMarginsId(id);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  const handleColumnsChange = useCallback(
+    (next: 1 | 2 | 3) => {
+      columnsRef.current = next;
+      setColumns(next);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  const handleFontFamilyChange = useCallback(
+    (id: string) => {
+      fontFamilyIdRef.current = id;
+      setFontFamilyId(id);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  const handleFontSizeChange = useCallback(
+    (size: number) => {
+      fontSizePtRef.current = size;
+      setFontSizePt(size);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  const handleSpacingChange = useCallback(
+    (line: number, before: number, after: number) => {
+      lineSpacingRef.current = line;
+      paragraphSpacingBeforePtRef.current = before;
+      paragraphSpacingAfterPtRef.current = after;
+      setLineSpacing(line);
+      setParagraphSpacingBeforePt(before);
+      setParagraphSpacingAfterPt(after);
+      scheduleSave();
+    },
+    [scheduleSave]
+  );
+
+  const performOpen = useCallback(
+    async (path: string) => {
+      await flushSave();
+      const result = await readDoc(path);
+      if (!result.doc) return;
+      applyDoc(result.doc, result.path);
+      onSubTabChange("editor");
+    },
+    [applyDoc, flushSave, onSubTabChange]
+  );
+
+  const handleOpen = useCallback(
+    async (path: string) => {
+      if (activeDocPathRef.current && path !== activeDocPathRef.current) {
+        const result = await readDoc(path);
+        if (!result.doc) return;
         setPendingOpen({
-          id,
-          title: target.title,
+          path,
+          title: result.doc.title,
           hadMessages: aiPanelRef.current?.hasMessages() ?? false,
         });
         return;
       }
-      performOpen(id);
+      await performOpen(path);
     },
     [performOpen]
   );
 
   const confirmOpenContinue = useCallback(() => {
     if (!pendingOpen) return;
-    const id = pendingOpen.id;
+    const path = pendingOpen.path;
     setPendingOpen(null);
-    performOpen(id);
+    performOpen(path).catch(() => {});
   }, [pendingOpen, performOpen]);
 
   const confirmOpenNewChat = useCallback(() => {
     if (!pendingOpen) return;
-    const id = pendingOpen.id;
+    const path = pendingOpen.path;
     setPendingOpen(null);
-    performOpen(id);
+    performOpen(path).catch(() => {});
     aiPanelRef.current?.restart().catch(() => {});
   }, [pendingOpen, performOpen]);
 
@@ -405,46 +540,42 @@ export function WordTab({
     setPendingOpen(null);
   }, []);
 
-  const handleNew = useCallback(() => {
-    flushSave();
-    const { state: next, doc } = createDoc(storeRef.current);
-    commitStore(next);
-    hydrateEditor(doc.id);
+  const handleNew = useCallback(async () => {
+    await flushSave();
+    const folder = workingDir ?? (await getWorkingDir());
+    const { doc, path } = await createDoc(folder);
+    setWorkingDirState(folder);
+    applyDoc(doc, path);
+    setRefreshSaves((tick) => tick + 1);
     onSubTabChange("editor");
     window.setTimeout(() => {
       titleRef.current?.focus();
       titleRef.current?.select();
     }, 50);
-  }, [flushSave, commitStore, hydrateEditor, onSubTabChange]);
+  }, [applyDoc, flushSave, onSubTabChange, workingDir]);
 
   const handleDelete = useCallback(
-    (id: string) => {
-      const wasActive = storeRef.current.activeId === id;
-      const next = deleteDoc(storeRef.current, id);
-      commitStore(next);
-      if (wasActive) {
-        if (next.activeId) {
-          hydrateEditor(next.activeId);
-        } else {
-          hydrateEditor(null);
-          onSubTabChange("saves");
-        }
+    async (path: string) => {
+      await deleteDoc(path);
+      if (activeDocPathRef.current === path) {
+        applyDoc(null, null);
+        onSubTabChange("saves");
       }
+      setRefreshSaves((tick) => tick + 1);
     },
-    [commitStore, hydrateEditor, onSubTabChange]
+    [applyDoc, onSubTabChange]
   );
 
   const handleDuplicate = useCallback(
-    (id: string) => {
-      flushSave();
-      const next = duplicateDoc(storeRef.current, id);
-      commitStore(next);
-      if (next.activeId) hydrateEditor(next.activeId);
+    async (path: string) => {
+      await flushSave();
+      const result = await duplicateDoc(path);
+      applyDoc(result.doc, result.path);
+      setRefreshSaves((tick) => tick + 1);
+      onSubTabChange("editor");
     },
-    [flushSave, commitStore, hydrateEditor]
+    [applyDoc, flushSave, onSubTabChange]
   );
-
-  const docs = useMemo(() => listDocs(store), [store]);
 
   const savedAtLabel = savedAt
     ? `Saved ${formatRelative(savedAt)}`
@@ -455,74 +586,94 @@ export function WordTab({
   const handleApplyDoc = useCallback(
     (html: string) => {
       const editor = editorRef.current;
-      if (!editor) return;
-      const id = storeRef.current.activeId;
-      if (id) {
-        const existing = storeRef.current.docs[id];
-        if (existing?.html.trim()) {
-          rememberBackup(existing, "before-ai-edit");
-        }
+      const doc = activeDocRef.current;
+      if (!editor || !doc) return;
+      if (doc.html.trim()) {
+        rememberBackup(doc, "before-ai-edit").catch(() => {});
       }
       editor.innerHTML = html;
       editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
       refreshStats();
-      flushSave();
+      flushSave().catch(() => {});
       pushWordDocToMain(htmlToMarkdown(editor)).catch(() => {});
     },
-    [rememberBackup, refreshStats, flushSave]
+    [flushSave, refreshStats, rememberBackup]
   );
 
-  const latestBackup = useMemo(() => {
-    const id = store.activeId;
-    return id ? getLatestBackupForDoc(id) : null;
-    // backupTick tracks backup changes because localStorage is outside React.
-  }, [store.activeId, backupTick]);
-
-  const handleRestoreBackup = useCallback(() => {
-    const id = storeRef.current.activeId;
-    const backup = id ? getLatestBackupForDoc(id) : null;
-    if (!id || !backup || !editorRef.current) return;
-    const current = storeRef.current.docs[id];
-    if (current?.html.trim()) {
-      rememberBackup(current, "before-restore-backup");
+  const handleRestoreBackup = useCallback(async () => {
+    const doc = activeDocRef.current;
+    if (!doc || !latestBackup || !editorRef.current || !activeDocPathRef.current) {
+      return;
     }
-    editorRef.current.innerHTML = backup.html;
-    pageLayoutRef.current = backup.pageLayoutId ?? DEFAULT_PAGE_LAYOUT_ID;
-    pageColorRef.current = backup.pageColorId ?? DEFAULT_PAGE_COLOR_ID;
-    setTitle(backup.title);
-    setPageLayoutId(pageLayoutRef.current);
-    setPageColorId(pageColorRef.current);
-    refreshStats();
-    const next = updateDoc(storeRef.current, id, {
-      html: backup.html,
-      title: backup.title,
-      pageLayoutId: backup.pageLayoutId ?? DEFAULT_PAGE_LAYOUT_ID,
-      pageColorId: backup.pageColorId ?? DEFAULT_PAGE_COLOR_ID,
-    });
-    commitStore(next);
-    setSavedAt(next.docs[id].updatedAt);
-  }, [commitStore, refreshStats, rememberBackup]);
+    if (doc.html.trim()) {
+      await rememberBackup(doc, "before-restore-backup");
+    }
+    const backup = await readBackup(latestBackup.path);
+    if (!backup) return;
+    const restored = { ...backup, id: doc.id, updatedAt: Date.now() };
+    const path = activeDocPathRef.current;
+    applyDoc(restored, path);
+    if (path) await writeDoc(restored, path);
+    setRefreshSaves((tick) => tick + 1);
+  }, [applyDoc, latestBackup, rememberBackup]);
 
   const handleExport = useCallback(
     (format: ExportFormat) => {
-      // Flush so the export reflects the latest edits.
-      flushSave();
+      flushSave().catch(() => {});
       exportDoc(format, title, editorRef.current);
     },
     [flushSave, title]
   );
+
+  const handleImport = useCallback(
+    async (file: File) => {
+      await flushSave();
+      const folder = workingDir ?? (await getWorkingDir());
+      const imported = await importFile(file);
+      const created = await createDoc(folder, imported.title);
+      const doc: WordDoc = {
+        ...created.doc,
+        title: imported.title,
+        html: imported.html,
+        snippet: htmlToSnippet(imported.html),
+        pageColorId: DEFAULT_PAGE_COLOR_ID,
+        updatedAt: Date.now(),
+      };
+      const written = await writeDoc(doc, created.path);
+      setWorkingDirState(folder);
+      applyDoc(doc, written.path);
+      setRefreshSaves((tick) => tick + 1);
+      onSubTabChange("editor");
+    },
+    [applyDoc, flushSave, onSubTabChange, workingDir]
+  );
+
+  const handleWorkingDirChange = useCallback((path: string) => {
+    setWorkingDirState(path);
+    setRefreshSaves((tick) => tick + 1);
+  }, []);
 
   const aiPanel = (
     <AIPanel ref={aiPanelRef} getEditor={getEditor} onApplyDoc={handleApplyDoc} />
   );
   const savesView = (
     <SavesView
-      docs={docs}
-      activeId={store.activeId}
-      onOpen={handleOpen}
-      onNew={handleNew}
-      onDelete={handleDelete}
-      onDuplicate={handleDuplicate}
+      workingDir={workingDir}
+      refreshKey={refreshSaves}
+      activePath={activeDocPath}
+      onWorkingDirChange={handleWorkingDirChange}
+      onOpen={(path) => {
+        handleOpen(path).catch(() => {});
+      }}
+      onNew={() => {
+        handleNew().catch(() => {});
+      }}
+      onDelete={(path) => {
+        handleDelete(path).catch(() => {});
+      }}
+      onDuplicate={(path) => {
+        handleDuplicate(path).catch(() => {});
+      }}
     />
   );
 
@@ -540,14 +691,35 @@ export function WordTab({
           onInput={handleInput}
           onPaste={handlePaste}
           onSelection={handleSelection}
-          onForceSave={flushSave}
+          onForceSave={() => {
+            flushSave().catch(() => {});
+          }}
           onExport={handleExport}
+          onImport={(file) => {
+            handleImport(file).catch(() => {});
+          }}
           canRestoreBackup={Boolean(latestBackup)}
-          onRestoreBackup={handleRestoreBackup}
+          onRestoreBackup={() => {
+            handleRestoreBackup().catch(() => {});
+          }}
           pageLayoutId={pageLayoutId}
           onPageLayoutChange={handlePageLayoutChange}
           pageColorId={pageColorId}
           onPageColorChange={handlePageColorChange}
+          orientation={orientation}
+          onOrientationChange={handleOrientationChange}
+          marginsId={marginsId}
+          onMarginsChange={handleMarginsChange}
+          columns={columns}
+          onColumnsChange={handleColumnsChange}
+          fontFamilyId={fontFamilyId}
+          onFontFamilyChange={handleFontFamilyChange}
+          fontSizePt={fontSizePt}
+          onFontSizeChange={handleFontSizeChange}
+          lineSpacing={lineSpacing}
+          paragraphSpacingBeforePt={paragraphSpacingBeforePt}
+          paragraphSpacingAfterPt={paragraphSpacingAfterPt}
+          onSpacingChange={handleSpacingChange}
           exec={exec}
           hidden={!savesPortalId && subTab !== "editor"}
         />
