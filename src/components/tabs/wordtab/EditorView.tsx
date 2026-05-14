@@ -35,6 +35,7 @@ const PAGE_GAP_PX = 36;
 const INNER_COLUMN_GAP_PX = 28;
 const MAX_PAGE_COUNT = 80;
 const PAGE_COUNT_TOLERANCE_PX = 24;
+const VERTICAL_PAGE_COUNT_TOLERANCE_PX = 1;
 const CSS_IN_PX = 96;
 
 type Props = {
@@ -541,7 +542,17 @@ export const EditorView = forwardRef(function EditorView(
       }
     });
     children.forEach((child) => {
-      if (child.dataset.wordPageBreak === "true") return;
+      if (child.dataset.wordPageBreak === "true") {
+        const topInPage = positiveModulo(child.offsetTop, pagePeriodPx);
+        const pushPx = topInPage === 0 ? pagePeriodPx : pagePeriodPx - topInPage;
+        const computed = window.getComputedStyle(child);
+        const original = child.style.marginTop || "";
+        const originalPx = Number.parseFloat(computed.marginTop || "0") || 0;
+        child.dataset.wordOriginalMarginTop = original;
+        child.dataset.wordAutoBreak = "true";
+        child.style.marginTop = `${originalPx + pushPx}px`;
+        return;
+      }
       const height = child.offsetHeight;
       if (!height) return;
       const topInPage = child.offsetTop % pagePeriodPx;
@@ -611,10 +622,18 @@ export const EditorView = forwardRef(function EditorView(
       nextPageCount =
         columns > 1 ? Math.ceil(columnSegments / columns) : columnSegments;
     } else {
-      if (node.scrollHeight > writingAreaHeightPx + PAGE_COUNT_TOLERANCE_PX) {
+      const contentBottom = Array.from(node.children).reduce((bottom, child) => {
+        if (!(child instanceof HTMLElement)) return bottom;
+        return Math.max(bottom, child.offsetTop + child.offsetHeight);
+      }, node.scrollHeight);
+      if (contentBottom > writingAreaHeightPx + VERTICAL_PAGE_COUNT_TOLERANCE_PX) {
         nextPageCount =
-          Math.floor((node.scrollHeight - PAGE_COUNT_TOLERANCE_PX) / pagePeriodPx) +
-          1;
+          Math.floor(
+            (contentBottom -
+              writingAreaHeightPx -
+              VERTICAL_PAGE_COUNT_TOLERANCE_PX) /
+              pagePeriodPx
+          ) + 2;
       }
     }
     const boundedPageCount = Math.min(MAX_PAGE_COUNT, Math.max(1, nextPageCount));
@@ -1131,6 +1150,15 @@ export const EditorView = forwardRef(function EditorView(
         .word-editor-surface {
           position: relative;
           caret-color: var(--word-page-text);
+          min-width: 0;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .word-editor-surface :where(p, h1, h2, h3, li, blockquote, div) {
+          max-width: 100%;
+          min-width: 0;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
         .word-editor-surface[data-placeholder]:empty::before,
         .word-editor-surface[data-placeholder]:has(> br:only-child)::before {
