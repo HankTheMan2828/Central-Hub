@@ -136,7 +136,7 @@ export function createDoc(
     title,
     html: "",
     pageLayoutId: "letter",
-    pageColorId: "default",
+    pageColorId: "theme",
     snippet: "",
     createdAt: now,
     updatedAt: now,

@@ -27,7 +27,7 @@ import {
 
 const SAVE_DEBOUNCE_MS = 600;
 const DEFAULT_PAGE_LAYOUT_ID = "letter";
-const DEFAULT_PAGE_COLOR_ID = "default";
+const DEFAULT_PAGE_COLOR_ID = "theme";
 
 async function pushWordDocToMain(content: string): Promise<void> {
   if (typeof window === "undefined") return;

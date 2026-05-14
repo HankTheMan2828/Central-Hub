@@ -12,175 +12,21 @@ import {
 } from "react";
 import {
   FileText,
-  Bold,
-  Italic,
-  Underline,
-  Heading1,
-  Heading2,
-  List,
-  ListOrdered,
-  Quote,
-  Undo2,
-  Redo2,
-  History,
-  RemoveFormatting,
-  Link as LinkIcon,
   Download,
   ChevronDown,
-  Columns2,
-  Palette,
 } from "lucide-react";
 import type { ExportFormat } from "./exporters";
-
-type PageLayout = {
-  id: string;
-  label: string;
-  meta: string;
-  width: string;
-  height: string;
-  margin: string;
-  columns: 1 | 2;
-};
-
-type PageFlow = "vertical" | "horizontal";
-
-type PageColor = {
-  id: string;
-  label: string;
-  background: string;
-  text: string;
-  muted: string;
-  heading: string;
-  subheading: string;
-  quote: string;
-  rule: string;
-  ring: string;
-};
+import { PAGE_LAYOUTS, PAGE_COLORS } from "./pageOptions";
+import { RibbonTabs, type RibbonTabId } from "./ribbon/RibbonTabs";
+import { HomeRibbon } from "./ribbon/HomeRibbon";
+import { LayoutRibbon } from "./ribbon/LayoutRibbon";
+import { ViewRibbon, type PageFlow } from "./ribbon/ViewRibbon";
+import type { FormatState } from "./ribbon/shared";
 
 const PAGE_GAP_PX = 36;
 const INNER_COLUMN_GAP_PX = 28;
 const MAX_PAGE_COUNT = 80;
 const PAGE_COUNT_TOLERANCE_PX = 24;
-
-const PAGE_LAYOUTS: PageLayout[] = [
-  {
-    id: "letter",
-    label: "Letter",
-    meta: '8.5" x 11"',
-    width: "8.5in",
-    height: "11in",
-    margin: "1in",
-    columns: 1,
-  },
-  {
-    id: "legal",
-    label: "Legal",
-    meta: '8.5" x 14"',
-    width: "8.5in",
-    height: "14in",
-    margin: "1in",
-    columns: 1,
-  },
-  {
-    id: "a4",
-    label: "A4",
-    meta: '8.27" x 11.69"',
-    width: "8.27in",
-    height: "11.69in",
-    margin: "0.95in",
-    columns: 1,
-  },
-  {
-    id: "a5",
-    label: "A5",
-    meta: '5.83" x 8.27"',
-    width: "5.83in",
-    height: "8.27in",
-    margin: "0.62in",
-    columns: 1,
-  },
-  {
-    id: "executive",
-    label: "Executive",
-    meta: '7.25" x 10.5"',
-    width: "7.25in",
-    height: "10.5in",
-    margin: "0.78in",
-    columns: 1,
-  },
-  {
-    id: "letter-landscape-columns",
-    label: "Book landscape columns",
-    meta: '10.5" x 7.5" - 2 columns',
-    width: "10.5in",
-    height: "7.5in",
-    margin: "0.62in",
-    columns: 2,
-  },
-];
-
-const PAGE_COLORS: PageColor[] = [
-  {
-    id: "theme",
-    label: "Follow theme",
-    background: "var(--ch-bg-elevated)",
-    text: "var(--ch-text)",
-    muted: "var(--ch-text-faint)",
-    heading: "var(--ch-accent)",
-    subheading: "var(--ch-text)",
-    quote: "var(--ch-text-muted)",
-    rule: "var(--ch-border-subtle)",
-    ring: "var(--ch-border)",
-  },
-  {
-    id: "default",
-    label: "Default",
-    background: "#efe0c2",
-    text: "#1f1a14",
-    muted: "#9d9489",
-    heading: "#7a4307",
-    subheading: "#17130f",
-    quote: "#4f4941",
-    rule: "rgba(91, 69, 42, 0.2)",
-    ring: "rgba(106, 77, 39, 0.2)",
-  },
-  {
-    id: "dull-tan",
-    label: "Dull Tan",
-    background: "#c7b08a",
-    text: "#211a11",
-    muted: "#6f604b",
-    heading: "#623d12",
-    subheading: "#211a11",
-    quote: "#4d4334",
-    rule: "rgba(61, 47, 28, 0.24)",
-    ring: "rgba(61, 47, 28, 0.25)",
-  },
-  {
-    id: "dark-grey",
-    label: "Dark Grey",
-    background: "#2b2b2b",
-    text: "#eee9df",
-    muted: "#aaa39a",
-    heading: "#ffbd66",
-    subheading: "#f7f0e6",
-    quote: "#c9c0b5",
-    rule: "rgba(255, 255, 255, 0.18)",
-    ring: "rgba(255, 255, 255, 0.14)",
-  },
-  {
-    id: "black",
-    label: "Black",
-    background: "#050505",
-    text: "#f3eee6",
-    muted: "#928b83",
-    heading: "#ffb347",
-    subheading: "#fff8ee",
-    quote: "#c7beb3",
-    rule: "rgba(255, 255, 255, 0.16)",
-    ring: "rgba(255, 255, 255, 0.16)",
-  },
-];
 
 type Props = {
   title: string;
@@ -245,13 +91,10 @@ export const EditorView = forwardRef(function EditorView(
   editorRef: ForwardedRef<HTMLDivElement>
 ) {
   const [exportOpen, setExportOpen] = useState(false);
-  const [pageOpen, setPageOpen] = useState(false);
-  const [pageColorOpen, setPageColorOpen] = useState(false);
+  const [activeRibbon, setActiveRibbon] = useState<RibbonTabId>("home");
   const [pageFlow, setPageFlow] = useState<PageFlow>("vertical");
   const [pageCount, setPageCount] = useState(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
-  const pageMenuRef = useRef<HTMLDivElement | null>(null);
-  const pageColorMenuRef = useRef<HTMLDivElement | null>(null);
   const localEditorRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
 
@@ -266,28 +109,6 @@ export const EditorView = forwardRef(function EditorView(
     return () => document.removeEventListener("mousedown", handler);
   }, [exportOpen]);
 
-  useEffect(() => {
-    if (!pageOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (!pageMenuRef.current?.contains(e.target as Node)) {
-        setPageOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [pageOpen]);
-
-  useEffect(() => {
-    if (!pageColorOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (!pageColorMenuRef.current?.contains(e.target as Node)) {
-        setPageColorOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [pageColorOpen]);
-
   const handleHeading = useCallback(
     (tag: "H1" | "H2" | "P" | "BLOCKQUOTE") => {
       exec("formatBlock", tag);
@@ -300,6 +121,18 @@ export const EditorView = forwardRef(function EditorView(
     if (!url) return;
     exec("createLink", url);
   }, [exec]);
+
+  // hiliteColor isn't reliable across browsers; fall back to backColor when
+  // unsupported. "transparent" clears the highlight.
+  const applyHighlight = useCallback(
+    (color: string) => {
+      const cmd = document.queryCommandSupported?.("hiliteColor")
+        ? "hiliteColor"
+        : "backColor";
+      exec(cmd, color);
+    },
+    [exec]
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -329,7 +162,7 @@ export const EditorView = forwardRef(function EditorView(
   const pageLayout =
     PAGE_LAYOUTS.find((layout) => layout.id === pageLayoutId) ?? PAGE_LAYOUTS[0];
   const pageColor =
-    PAGE_COLORS.find((color) => color.id === pageColorId) ?? PAGE_COLORS[1];
+    PAGE_COLORS.find((color) => color.id === pageColorId) ?? PAGE_COLORS[0];
   const stripStyle = useMemo<CSSProperties>(
     () => ({
       width:
@@ -500,15 +333,24 @@ export const EditorView = forwardRef(function EditorView(
   );
 
   const block = queryBlock();
-  const isBold = queryState("bold");
-  const isItalic = queryState("italic");
-  const isUnderline = queryState("underline");
-  const isUL = queryState("insertUnorderedList");
-  const isOL = queryState("insertOrderedList");
-  const isH1 = block === "h1";
-  const isH2 = block === "h2";
-  const isP = block === "p" || (!isH1 && !isH2 && !block.startsWith("h"));
-  const isQuote = block === "blockquote";
+  const formatState: FormatState = {
+    isBold: queryState("bold"),
+    isItalic: queryState("italic"),
+    isUnderline: queryState("underline"),
+    isStrike: queryState("strikeThrough"),
+    isSub: queryState("subscript"),
+    isSuper: queryState("superscript"),
+    isUL: queryState("insertUnorderedList"),
+    isOL: queryState("insertOrderedList"),
+    isH1: block === "h1",
+    isH2: block === "h2",
+    isP: block === "p" || (!block || (!block.startsWith("h") && block !== "blockquote")),
+    isQuote: block === "blockquote",
+    isAlignLeft: queryState("justifyLeft"),
+    isAlignCenter: queryState("justifyCenter"),
+    isAlignRight: queryState("justifyRight"),
+    isAlignJustify: queryState("justifyFull"),
+  };
 
   const exportFormats: { id: ExportFormat; label: string; ext: string }[] = [
     { id: "md", label: "Markdown", ext: ".md" },
@@ -584,224 +426,31 @@ export const EditorView = forwardRef(function EditorView(
         </div>
       </header>
 
-      <div className="px-3 py-1.5 border-b border-[var(--ch-border-subtle)] flex items-center gap-1 shrink-0 flex-wrap">
-        <ToolbarBtn
-          title="Bold (Ctrl+B)"
-          onClick={() => exec("bold")}
-          active={isBold}
-        >
-          <Bold className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Italic (Ctrl+I)"
-          onClick={() => exec("italic")}
-          active={isItalic}
-        >
-          <Italic className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Underline (Ctrl+U)"
-          onClick={() => exec("underline")}
-          active={isUnderline}
-        >
-          <Underline className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <Divider />
-        <ToolbarBtn
-          title="Heading 1 (Ctrl+1)"
-          onClick={() => handleHeading("H1")}
-          active={isH1}
-        >
-          <Heading1 className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Heading 2 (Ctrl+2)"
-          onClick={() => handleHeading("H2")}
-          active={isH2}
-        >
-          <Heading2 className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Paragraph (Ctrl+0)"
-          onClick={() => handleHeading("P")}
-          active={isP && !isQuote && !isUL && !isOL}
-        >
-          <span className="text-[10px] font-mono">P</span>
-        </ToolbarBtn>
-        <Divider />
-        <ToolbarBtn
-          title="Bulleted list"
-          onClick={() => exec("insertUnorderedList")}
-          active={isUL}
-        >
-          <List className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Numbered list"
-          onClick={() => exec("insertOrderedList")}
-          active={isOL}
-        >
-          <ListOrdered className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          title="Block quote"
-          onClick={() => handleHeading("BLOCKQUOTE")}
-          active={isQuote}
-        >
-          <Quote className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn title="Insert link (Ctrl+K)" onClick={handleInsertLink}>
-          <LinkIcon className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <Divider />
-        <ToolbarBtn
-          title="Clear formatting"
-          onClick={() => exec("removeFormat")}
-        >
-          <RemoveFormatting className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn title="Undo (Ctrl+Z)" onClick={() => exec("undo")}>
-          <Undo2 className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn title="Redo (Ctrl+Shift+Z)" onClick={() => exec("redo")}>
-          <Redo2 className="w-3.5 h-3.5" />
-        </ToolbarBtn>
-        {canRestoreBackup && (
-          <ToolbarBtn title="Restore latest backup" onClick={onRestoreBackup}>
-            <History className="w-3.5 h-3.5" />
-          </ToolbarBtn>
+      <RibbonTabs active={activeRibbon} onChange={setActiveRibbon} />
+
+      <div className="px-3 py-1.5 border-b border-[var(--ch-border-subtle)] flex items-center gap-1 shrink-0 flex-wrap min-h-[44px]">
+        {activeRibbon === "home" && (
+          <HomeRibbon
+            exec={exec}
+            applyHighlight={applyHighlight}
+            onHeading={handleHeading}
+            onInsertLink={handleInsertLink}
+            formatState={formatState}
+            canRestoreBackup={canRestoreBackup}
+            onRestoreBackup={onRestoreBackup}
+          />
         )}
-        <Divider />
-
-        <div className="relative" ref={pageMenuRef}>
-          <button
-            type="button"
-            onClick={() => setPageOpen((v) => !v)}
-            onMouseDown={(e) => e.preventDefault()}
-            title="Page size"
-            className={`clouds-coding-dropdown-button flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
-              pageOpen
-                ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
-            }`}
-          >
-            {pageLayout.columns === 2 ? (
-              <Columns2 className="w-3 h-3" />
-            ) : (
-              <FileText className="w-3 h-3" />
-            )}
-            {pageLayout.label}
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {pageOpen && (
-            <div className="clouds-coding-dropdown-panel absolute top-full left-0 mt-1 z-30 min-w-[250px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
-              {PAGE_LAYOUTS.map((layout) => (
-                <button
-                  key={layout.id}
-                  type="button"
-                  onClick={() => {
-                    setPageOpen(false);
-                    onPageLayoutChange(layout.id);
-                  }}
-                  className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left font-mono transition-colors ${
-                    layout.id === pageLayout.id
-                      ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                      : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    {layout.columns === 2 ? (
-                      <Columns2 className="w-3.5 h-3.5 shrink-0" />
-                    ) : (
-                      <FileText className="w-3.5 h-3.5 shrink-0" />
-                    )}
-                    <span className="text-[11px] truncate">{layout.label}</span>
-                  </span>
-                  <span className="text-[9px] text-[var(--ch-text-faint)] shrink-0">
-                    {layout.meta}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="relative" ref={pageColorMenuRef}>
-          <button
-            type="button"
-            onClick={() => setPageColorOpen((v) => !v)}
-            onMouseDown={(e) => e.preventDefault()}
-            title="Page Color"
-            className={`clouds-coding-dropdown-button flex items-center gap-1.5 px-2 h-7 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
-              pageColorOpen
-                ? "border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                : "border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)]"
-            }`}
-          >
-            <Palette className="w-3 h-3" />
-            <span
-              className="h-3 w-3 rounded-[2px] border border-[var(--ch-border-subtle)]"
-              style={{ backgroundColor: pageColor.background }}
-            />
-            Page Color
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {pageColorOpen && (
-            <div className="clouds-coding-dropdown-panel absolute top-full left-0 mt-1 z-30 min-w-[190px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
-              {PAGE_COLORS.map((color) => (
-                <button
-                  key={color.id}
-                  type="button"
-                  onClick={() => {
-                    setPageColorOpen(false);
-                    onPageColorChange(color.id);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left font-mono transition-colors ${
-                    color.id === pageColor.id
-                      ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                      : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
-                  }`}
-                >
-                  <span
-                    className="h-3.5 w-3.5 rounded-[2px] border border-[var(--ch-border-subtle)] shrink-0"
-                    style={{ backgroundColor: color.background }}
-                  />
-                  <span className="text-[11px] truncate">{color.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex h-7 overflow-hidden rounded-sm border border-[var(--ch-border-subtle)]">
-          <button
-            type="button"
-            title="Scroll pages vertically"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setPageFlow("vertical")}
-            className={`px-2 text-[10px] uppercase tracking-widest font-mono transition-colors ${
-              pageFlow === "vertical"
-                ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                : "text-[var(--ch-text-muted)] hover:text-[var(--ch-accent)]"
-            }`}
-          >
-            Vertical
-          </button>
-          <button
-            type="button"
-            title="Scroll pages horizontally"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setPageFlow("horizontal")}
-            className={`border-l border-[var(--ch-border-subtle)] px-2 text-[10px] uppercase tracking-widest font-mono transition-colors ${
-              pageFlow === "horizontal"
-                ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                : "text-[var(--ch-text-muted)] hover:text-[var(--ch-accent)]"
-            }`}
-          >
-            Horizontal
-          </button>
-        </div>
-
+        {activeRibbon === "layout" && (
+          <LayoutRibbon
+            pageLayoutId={pageLayoutId}
+            onPageLayoutChange={onPageLayoutChange}
+            pageColorId={pageColorId}
+            onPageColorChange={onPageColorChange}
+          />
+        )}
+        {activeRibbon === "view" && (
+          <ViewRibbon pageFlow={pageFlow} onPageFlowChange={setPageFlow} />
+        )}
       </div>
 
       <div
@@ -920,35 +569,3 @@ export const EditorView = forwardRef(function EditorView(
     </div>
   );
 });
-
-function ToolbarBtn({
-  title,
-  onClick,
-  children,
-  active,
-}: {
-  title: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  active?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={`w-7 h-7 flex items-center justify-center border transition-colors ${
-        active
-          ? "rounded-full border-[#FFB347]/60 bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-          : "rounded-sm border-transparent hover:border-[#FFB347]/40 hover:bg-[var(--ch-accent-5)] text-[var(--ch-text-muted)] hover:text-[var(--ch-accent)]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Divider() {
-  return <span className="w-px h-4 bg-[var(--ch-border-subtle)] mx-1" />;
-}
