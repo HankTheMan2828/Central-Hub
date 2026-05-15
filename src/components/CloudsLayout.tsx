@@ -67,16 +67,16 @@ export function CloudsLayout({
 
   const gridTemplateColumns = useMemo(() => {
     const side = "minmax(min(220px, 20vw), 0.64fr)";
-    const main = "minmax(min(560px, 58vw), 1.8fr)";
+    const main = "minmax(min(calc(560px + 4in), 58vw), 2.5fr)";
     return [hasLeft ? side : null, main, hasRight ? side : null]
       .filter(Boolean)
       .join(" ");
   }, [hasLeft, hasRight]);
 
   const clusterMaxWidth = useMemo(() => {
-    if (visibleSideCount === 2) return "1840px";
-    if (visibleSideCount === 1) return "1380px";
-    return "1040px";
+    if (visibleSideCount === 2) return "calc(1840px + 4in)";
+    if (visibleSideCount === 1) return "calc(1380px + 4in)";
+    return "calc(1040px + 4in)";
   }, [visibleSideCount]);
 
   useEffect(() => {
@@ -242,11 +242,11 @@ export function CloudsLayout({
               100vh - var(--clouds-stage-top) - var(--clouds-stage-bottom) -
                 var(--clouds-shadow-gutter)
             ),
-            980px
+            calc(980px + 1in)
           );
           --clouds-side-height: min(
             calc(72vh - var(--clouds-stage-top)),
-            620px
+            calc(620px + 1in)
           );
           --clouds-stack-gap: 1.75rem;
           --clouds-stack-top-height: min(34vh, 360px);

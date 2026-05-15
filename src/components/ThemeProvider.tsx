@@ -54,15 +54,12 @@ function readStoredTheme(): ThemeId {
 function readStoredLayout(): LayoutId {
   if (typeof window === "undefined") return DEFAULT_LAYOUT;
   try {
-    const defaultVersion = window.localStorage.getItem(
-      LAYOUT_DEFAULT_VERSION_STORAGE_KEY
-    );
     const saved = window.localStorage.getItem(
       LAYOUT_STORAGE_KEY
     ) as LayoutId | null;
-    return saved &&
-      LAYOUTS.some((l) => l.id === saved) &&
-      (defaultVersion === LAYOUT_DEFAULT_VERSION || saved !== "foundations")
+    // Foundations is no longer user-selectable; always migrate stored value to clouds.
+    // The Foundations render branch and CSS are intentionally preserved in the codebase.
+    return saved && LAYOUTS.some((l) => l.id === saved) && saved !== "foundations"
       ? saved
       : DEFAULT_LAYOUT;
   } catch {

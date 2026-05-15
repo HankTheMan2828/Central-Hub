@@ -71,6 +71,45 @@ export async function pickFolder(startPath?: string): Promise<string | null> {
   return result.path;
 }
 
+export async function pickFile(
+  startPath?: string
+): Promise<{ path: string; parent: string } | null> {
+  const result = await invoke<{ path: string | null; parent: string | null }>(
+    "docs:pick-file",
+    { startPath }
+  );
+  if (!result.path || !result.parent) return null;
+  return { path: result.path, parent: result.parent };
+}
+
+export async function readFileText(path: string): Promise<string> {
+  const result = await invoke<{
+    success: boolean;
+    content?: string;
+    error?: string;
+  }>("pi:read-file-text", { filePath: path });
+  if (!result.success) {
+    throw new Error(result.error || "File could not be read.");
+  }
+  return result.content ?? "";
+}
+
+export async function readFileBytes(path: string): Promise<Uint8Array> {
+  if (typeof window === "undefined") {
+    throw new Error("File reading is unavailable.");
+  }
+  try {
+    const nodeRequire = (0, eval)("require") as (id: string) => unknown;
+    const fs = nodeRequire("fs") as {
+      readFileSync: (path: string) => Uint8Array;
+    };
+    const bytes = fs.readFileSync(path);
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  } catch {
+    throw new Error("Binary file reading is unavailable.");
+  }
+}
+
 export async function browse(path?: string): Promise<BrowseResult> {
   return invoke<BrowseResult>("docs:browse", { path });
 }
@@ -125,6 +164,36 @@ export async function readBackup(path: string): Promise<WordDoc | null> {
     backupPath: path,
   });
   return result.doc;
+}
+
+export type DocLayoutSidecar = {
+  pageLayoutId?: string;
+  pageColorId?: string;
+  orientation?: "portrait" | "landscape";
+  marginsId?: string;
+  columns?: 1 | 2 | 3;
+  fontFamilyId?: string;
+  fontSizePt?: number;
+  lineSpacing?: number;
+  paragraphSpacingBeforePt?: number;
+  paragraphSpacingAfterPt?: number;
+};
+
+export async function readDocLayout(
+  path: string
+): Promise<DocLayoutSidecar | null> {
+  const result = await invoke<{ layout: DocLayoutSidecar | null }>(
+    "docs:read-layout",
+    { path }
+  );
+  return result.layout;
+}
+
+export async function writeDocLayout(
+  path: string,
+  layout: DocLayoutSidecar
+): Promise<void> {
+  await invoke<{ ok: boolean }>("docs:write-layout", { path, layout });
 }
 
 export async function reveal(path: string): Promise<void> {

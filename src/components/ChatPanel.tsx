@@ -87,6 +87,17 @@ function modelKey(m: { provider: string; id: string }) {
   return `${m.provider}:${m.id}`;
 }
 
+function titleFromPrompt(text: string) {
+  const cleaned = text
+    .replace(/\s+/g, " ")
+    .replace(/^\/\S+\s*/, "")
+    .trim();
+  if (!cleaned) return "New chat";
+  const words = cleaned.split(" ").slice(0, 5);
+  const title = words.join(" ").replace(/[.,!?;:]+$/g, "");
+  return title.slice(0, 40) || "New chat";
+}
+
 /* ------------------------------------------------------------------ */
 /*  ChatPanel — one per tab, owns its own usePiChat + PI session      */
 /* ------------------------------------------------------------------ */
@@ -180,6 +191,7 @@ export function ChatPanel({
   const wasStreamingRef = useRef(false);
   const wasStreamingForTitleRef = useRef(false);
   const titleGeneratedRef = useRef(false);
+  const provisionalTitleRef = useRef(false);
 
   /* ---- autocomplete ---- */
   const [acOpen, setAcOpen] = useState(false);
@@ -271,6 +283,7 @@ export function ChatPanel({
     historyEntryIdRef.current = resumeEntry.id;
     lastHistorySignatureRef.current = "";
     titleGeneratedRef.current = false;
+    provisionalTitleRef.current = true;
     chat.restart().then(() => {
       chat.restoreMessages(resumeEntry.messages);
       onResumeHandled?.();
@@ -680,6 +693,14 @@ export function ChatPanel({
 
     const hiddenContext = resumeContextRef.current;
     resumeContextRef.current = null;
+    if (
+      onTitleChange &&
+      !provisionalTitleRef.current &&
+      !chat.messages.some((message) => message.role === "user")
+    ) {
+      provisionalTitleRef.current = true;
+      onTitleChange(tabId, titleFromPrompt(mainText));
+    }
     chat.sendMessage(mainText, attachments, hiddenContext ?? undefined);
 
     setDraftText("");
@@ -688,13 +709,17 @@ export function ChatPanel({
     setConfirmRemoveId(null);
     chat.clearImages();
     chat.clearDocuments();
-  }, [draftText, pasteBoxes, chat]);
+  }, [draftText, pasteBoxes, chat, onTitleChange, tabId]);
 
   /* ================================================================ */
   /*  startNew for this tab                                           */
   /* ================================================================ */
   const handleStartNew = useCallback(() => {
     chat.restart().catch(() => {});
+    titleGeneratedRef.current = false;
+    provisionalTitleRef.current = false;
+    historyEntryIdRef.current = "";
+    lastHistorySignatureRef.current = "";
     setPasteBoxes([]);
     setSentContextItems([]);
     onStartNew();

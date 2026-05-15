@@ -73,3 +73,64 @@ body::before {
   backdrop-filter: blur(0px);
   transition: background-color 0.2s ease;
 }
+
+/* ── Themed range slider (Docs zoom etc.) ─────────────────────────── */
+/* The input stretches to fill its flex parent's content area so the
+   webkit/moz track auto-centers vertically. With a 4px track and 12px
+   thumb (margin-top -4px to keep it centered on the track), the thumb
+   ends up symmetric within the wrapper regardless of border width. */
+.ch-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+  align-self: stretch;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+.ch-zoom-slider:focus {
+  outline: none;
+}
+.ch-zoom-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--ch-border);
+  border-radius: 9999px;
+}
+.ch-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: var(--ch-accent);
+  border: 1px solid var(--ch-border);
+  margin-top: -4px;
+  transition: box-shadow 0.15s ease;
+}
+.ch-zoom-slider:hover::-webkit-slider-thumb,
+.ch-zoom-slider:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--ch-accent-10);
+}
+.ch-zoom-slider::-moz-range-track {
+  height: 4px;
+  background: var(--ch-border);
+  border-radius: 9999px;
+}
+.ch-zoom-slider::-moz-range-progress {
+  height: 4px;
+  background: var(--ch-accent);
+  border-radius: 9999px;
+}
+.ch-zoom-slider::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: var(--ch-accent);
+  border: 1px solid var(--ch-border);
+}
+.ch-zoom-slider:hover::-moz-range-thumb,
+.ch-zoom-slider:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--ch-accent-10);
+}

@@ -15,6 +15,7 @@ import {
   Download,
   ChevronDown,
   FileUp,
+  Save,
 } from "lucide-react";
 import type { ExportFormat } from "./exporters";
 import {
@@ -37,6 +38,9 @@ const MAX_PAGE_COUNT = 80;
 const PAGE_COUNT_TOLERANCE_PX = 24;
 const VERTICAL_PAGE_COUNT_TOLERANCE_PX = 1;
 const CSS_IN_PX = 96;
+const MIN_ZOOM = 50;
+const MAX_ZOOM = 200;
+const PAGE_WRAPPER_ATTR = "data-word-page-wrapper";
 
 type Props = {
   title: string;
@@ -168,6 +172,12 @@ export const EditorView = forwardRef(function EditorView(
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const localEditorRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
+  const pageCountFrameRef = useRef<number | null>(null);
+  const paginationMutatingRef = useRef(false);
+
+  const handleZoomChange = useCallback((nextZoom: number) => {
+    setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom)));
+  }, []);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -289,9 +299,38 @@ export const EditorView = forwardRef(function EditorView(
     [fontSizePt, handleFontSize]
   );
 
+  const isSelectionInList = useCallback(() => {
+    const editor = localEditorRef.current;
+    const selection = window.getSelection();
+    let node: Node | null = selection?.anchorNode ?? null;
+    if (!editor || !node || !editor.contains(node)) return false;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    while (node && node !== editor) {
+      if (node instanceof HTMLElement && /^(UL|OL|LI)$/i.test(node.tagName)) {
+        return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const k = e.key.toLowerCase();
+      if (k === "tab") {
+        e.preventDefault();
+        if (isSelectionInList()) {
+          exec(e.shiftKey ? "outdent" : "indent");
+        } else if (e.shiftKey) {
+          exec("outdent");
+        } else {
+          exec(
+            "insertHTML",
+            '<span class="word-tab" style="display:inline-block;width:0.5in;"></span>'
+          );
+        }
+        return;
+      }
       if (k === "enter") {
         window.requestAnimationFrame(() => {
           localEditorRef.current?.dispatchEvent(
@@ -322,7 +361,7 @@ export const EditorView = forwardRef(function EditorView(
         handleHeading("P");
       }
     },
-    [onForceSave, handleInsertLink, handleHeading]
+    [exec, isSelectionInList, onForceSave, handleInsertLink, handleHeading]
   );
 
   const pageLayout =
@@ -350,20 +389,54 @@ export const EditorView = forwardRef(function EditorView(
   const marginLeftPx = cssLengthToPx(effectiveMargins.left);
   const writingAreaWidthPx = Math.max(1, pageWidthPx - marginLeftPx - marginRightPx);
   const writingAreaHeightPx = Math.max(1, pageHeightPx - marginTopPx - marginBottomPx);
-  const pagePeriodPx = pageHeightPx + PAGE_GAP_PX;
-  const pageMask = `repeating-linear-gradient(to bottom, #000 0px, #000 ${writingAreaHeightPx}px, transparent ${writingAreaHeightPx}px, transparent ${pagePeriodPx}px)`;
+  const verticalPageGapPx = 12;
+  const isVerticalMultiColumn = pageFlow === "vertical" && columns > 1;
+  const effectivePageFlow: PageFlow = pageFlow;
+  const horizontalPageStridePx =
+    columns > 1 ? writingAreaWidthPx + INNER_COLUMN_GAP_PX : pageWidthPx + PAGE_GAP_PX;
+  const horizontalPageGapPx = horizontalPageStridePx - pageWidthPx;
+  const pageWrapperGapPx = pageHeightPx + verticalPageGapPx - writingAreaHeightPx;
+  const innerColumnWidthPx =
+    columns > 1
+      ? (writingAreaWidthPx - INNER_COLUMN_GAP_PX * (columns - 1)) / columns
+      : writingAreaWidthPx;
+  const columnRuleOffsets = useMemo(
+    () =>
+      columns > 1
+        ? Array.from(
+            { length: columns - 1 },
+            (_, index) =>
+              marginLeftPx +
+              innerColumnWidthPx * (index + 1) +
+              INNER_COLUMN_GAP_PX * index +
+              INNER_COLUMN_GAP_PX / 2
+          )
+        : [],
+    [columns, innerColumnWidthPx, marginLeftPx]
+  );
+  const pagePeriodPx =
+    effectivePageFlow === "vertical"
+      ? pageHeightPx + verticalPageGapPx
+      : pageHeightPx + PAGE_GAP_PX;
   const stripStyle = useMemo<CSSProperties>(
     () => ({
       width:
-        pageFlow === "horizontal"
-          ? pageWidthPx * pageCount + PAGE_GAP_PX * (pageCount - 1)
+        effectivePageFlow === "horizontal"
+          ? pageWidthPx + horizontalPageStridePx * (pageCount - 1)
           : pageWidthPx,
       height:
-        pageFlow === "horizontal"
+        effectivePageFlow === "horizontal"
           ? pageHeightPx
-          : pageHeightPx * pageCount + PAGE_GAP_PX * (pageCount - 1),
+          : pageHeightPx * pageCount + verticalPageGapPx * (pageCount - 1),
     }),
-    [pageCount, pageFlow, pageHeightPx, pageWidthPx]
+    [
+      effectivePageFlow,
+      horizontalPageStridePx,
+      pageCount,
+      pageHeightPx,
+      pageWidthPx,
+      verticalPageGapPx,
+    ]
   );
   const pageThemeStyle = useMemo(
     () =>
@@ -381,6 +454,7 @@ export const EditorView = forwardRef(function EditorView(
   );
   const pageStyle = useMemo<CSSProperties>(
     () => ({
+      position: "relative",
       width: pageWidthPx,
       height: pageHeightPx,
       borderRadius: "7px",
@@ -397,34 +471,32 @@ export const EditorView = forwardRef(function EditorView(
       left: marginLeftPx,
       width: writingAreaWidthPx,
       height:
-        pageFlow === "horizontal"
+        effectivePageFlow === "horizontal" || isVerticalMultiColumn
           ? writingAreaHeightPx
           : undefined,
       minHeight: writingAreaHeightPx,
       outline: "none",
       columnFill: "auto",
       columnWidth:
-        pageFlow === "horizontal"
+        effectivePageFlow === "horizontal"
           ? columns > 1
-            ? (writingAreaWidthPx - INNER_COLUMN_GAP_PX * (columns - 1)) / columns
+            ? innerColumnWidthPx
             : writingAreaWidthPx
           : undefined,
       columnCount:
-        pageFlow === "vertical" && columns > 1
+        effectivePageFlow === "vertical" && columns > 1 && !isVerticalMultiColumn
           ? columns
           : undefined,
       columnGap:
-        pageFlow === "horizontal"
+        effectivePageFlow === "horizontal"
           ? columns > 1
             ? `${INNER_COLUMN_GAP_PX}px`
             : `${marginRightPx + marginLeftPx + PAGE_GAP_PX}px`
-          : columns > 1
+          : columns > 1 && !isVerticalMultiColumn
           ? `${INNER_COLUMN_GAP_PX}px`
           : undefined,
       columnRule:
-        columns > 1
-          ? "1px solid var(--word-page-rule)"
-          : undefined,
+        undefined,
       overflow: "visible",
       color: "var(--word-page-text)",
       fontFamily: "var(--word-font-family)",
@@ -435,21 +507,18 @@ export const EditorView = forwardRef(function EditorView(
       "--word-line-height": lineSpacing,
       "--word-para-before": `${paragraphSpacingBeforePt}pt`,
       "--word-para-after": `${paragraphSpacingAfterPt}pt`,
-      maskImage: pageFlow === "vertical" ? pageMask : undefined,
-      WebkitMaskImage: pageFlow === "vertical" ? pageMask : undefined,
-      maskRepeat: pageFlow === "vertical" ? "repeat-y" : undefined,
-      WebkitMaskRepeat: pageFlow === "vertical" ? "repeat-y" : undefined,
     } as CSSProperties),
     [
       columns,
       fontFamily,
       fontSizePt,
+      innerColumnWidthPx,
+      isVerticalMultiColumn,
       lineSpacing,
       marginLeftPx,
       marginRightPx,
       marginTopPx,
-      pageMask,
-      pageFlow,
+      effectivePageFlow,
       paragraphSpacingAfterPt,
       paragraphSpacingBeforePt,
       writingAreaHeightPx,
@@ -510,112 +579,189 @@ export const EditorView = forwardRef(function EditorView(
     }
   }, []);
 
-  const getSelectionPageBlock = useCallback(() => {
+  const unwrapPageWrappers = useCallback(() => {
     const node = localEditorRef.current;
-    const selection = window.getSelection();
-    if (!node || !selection?.rangeCount) return null;
-
-    const range = selection.getRangeAt(0);
-    if (!node.contains(range.startContainer)) return null;
-
-    let current: Node | null = range.startContainer;
-    if (current === node) {
-      current = node.childNodes[Math.max(0, range.startOffset - 1)] ?? node.lastChild;
-    }
-    if (current?.nodeType === Node.TEXT_NODE) {
-      current = current.parentElement;
-    }
-
-    while (current && current !== node) {
-      if (current instanceof HTMLElement && current.parentElement === node) {
-        return current;
+    if (!node) return;
+    Array.from(node.querySelectorAll<HTMLElement>(`[${PAGE_WRAPPER_ATTR}]`)).forEach(
+      (wrapper) => {
+        while (wrapper.firstChild) {
+          wrapper.parentNode?.insertBefore(wrapper.firstChild, wrapper);
+        }
+        wrapper.remove();
       }
-      current = current.parentElement;
-    }
-
-    return null;
+    );
   }, []);
 
-  const applyVerticalPageOffsets = useCallback(() => {
+  const createPageWrapper = useCallback(() => {
+    const page = document.createElement("div");
+    page.setAttribute(PAGE_WRAPPER_ATTR, "true");
+    page.className = "word-page-content";
+    page.style.width = `${writingAreaWidthPx}px`;
+    page.style.height = `${writingAreaHeightPx}px`;
+    page.style.marginBottom = `${pageWrapperGapPx}px`;
+    page.style.columnCount = String(columns);
+    page.style.columnGap = `${INNER_COLUMN_GAP_PX}px`;
+    page.style.columnFill = "auto";
+    return page;
+  }, [columns, pageWrapperGapPx, writingAreaHeightPx, writingAreaWidthPx]);
+
+  const applyMultiColumnPageWrappers = useCallback(() => {
     const node = localEditorRef.current;
-    if (!node || pageFlow !== "vertical") return;
-    normalizeTopLevelBlocks();
+    if (!node) return;
+    node.dataset.wordPaginating = "true";
+    try {
+      unwrapPageWrappers();
+      normalizeTopLevelBlocks();
+      node.querySelectorAll<HTMLElement>("[data-word-auto-break]").forEach((child) => {
+        child.style.marginTop = child.dataset.wordOriginalMarginTop ?? "";
+        delete child.dataset.wordAutoBreak;
+        delete child.dataset.wordOriginalMarginTop;
+      });
+
+      const children = Array.from(node.childNodes);
+      if (!children.length) return;
+
+      const pages: HTMLElement[] = [];
+      const makePage = () => {
+        const page = createPageWrapper();
+        pages.push(page);
+        node.appendChild(page);
+        return page;
+      };
+
+      let page = makePage();
+      children.forEach((child) => {
+        page.appendChild(child);
+        const hasOverflow =
+          page.scrollWidth > writingAreaWidthPx + PAGE_COUNT_TOLERANCE_PX;
+        if (hasOverflow && page.childNodes.length > 1) {
+          page.removeChild(child);
+          page = makePage();
+          page.appendChild(child);
+        }
+      });
+
+      pages.forEach((item, index) => {
+        if (index === pages.length - 1) {
+          item.style.marginBottom = "0px";
+        }
+      });
+    } finally {
+      window.requestAnimationFrame(() => {
+        delete node.dataset.wordPaginating;
+      });
+    }
+  }, [
+    createPageWrapper,
+    normalizeTopLevelBlocks,
+    unwrapPageWrappers,
+    writingAreaWidthPx,
+  ]);
+
+  const clearAutoPageOffsets = useCallback(() => {
+    const node = localEditorRef.current;
+    if (!node) return [];
+    const children = Array.from(
+      node.querySelectorAll<HTMLElement>("[data-word-auto-break]")
+    );
+    children.forEach((child) => {
+      child.style.marginTop = child.dataset.wordOriginalMarginTop ?? "";
+      delete child.dataset.wordAutoBreak;
+      delete child.dataset.wordOriginalMarginTop;
+    });
+    return children;
+  }, []);
+
+  const clearVerticalParagraphPushes = useCallback(() => {
+    const node = localEditorRef.current;
+    if (!node) return;
+    node
+      .querySelectorAll<HTMLElement>("[data-word-page-push]")
+      .forEach((child) => {
+        child.style.marginTop = child.dataset.wordOriginalPagePushMt ?? "";
+        if (!child.getAttribute("style")) child.removeAttribute("style");
+        delete child.dataset.wordOriginalPagePushMt;
+        delete child.dataset.wordPagePush;
+      });
+  }, []);
+
+  // In single-column vertical mode, walk top-level blocks and push any block
+  // whose bottom would straddle a page boundary down to the start of the next
+  // page. Without this, paragraphs visually overlap the page seam.
+  const applyVerticalParagraphPushes = useCallback(() => {
+    const node = localEditorRef.current;
+    if (!node) return;
+    clearVerticalParagraphPushes();
     const children = Array.from(node.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement
     );
     children.forEach((child) => {
-      if (child.dataset.wordAutoBreak === "true") {
-        child.style.marginTop = child.dataset.wordOriginalMarginTop ?? "";
-        delete child.dataset.wordAutoBreak;
-      }
-    });
-    children.forEach((child) => {
-      if (child.dataset.wordPageBreak === "true") {
-        const topInPage = positiveModulo(child.offsetTop, pagePeriodPx);
-        const pushPx = topInPage === 0 ? pagePeriodPx : pagePeriodPx - topInPage;
-        const computed = window.getComputedStyle(child);
-        const original = child.style.marginTop || "";
-        const originalPx = Number.parseFloat(computed.marginTop || "0") || 0;
-        child.dataset.wordOriginalMarginTop = original;
-        child.dataset.wordAutoBreak = "true";
-        child.style.marginTop = `${originalPx + pushPx}px`;
+      const top = child.offsetTop;
+      const height = child.offsetHeight;
+      if (!height || height > writingAreaHeightPx) return;
+      const topInPage = positiveModulo(top, pagePeriodPx);
+      if (
+        topInPage + height <=
+        writingAreaHeightPx + VERTICAL_PAGE_COUNT_TOLERANCE_PX
+      ) {
         return;
       }
-      const height = child.offsetHeight;
-      if (!height) return;
-      const topInPage = child.offsetTop % pagePeriodPx;
-      if (topInPage <= 0 || topInPage + height <= writingAreaHeightPx) return;
-      const computed = window.getComputedStyle(child);
-      const original = child.style.marginTop || "";
-      const originalPx = Number.parseFloat(computed.marginTop || "0") || 0;
       const pushPx = pagePeriodPx - topInPage;
-      child.dataset.wordOriginalMarginTop = original;
-      child.dataset.wordAutoBreak = "true";
+      if (pushPx <= 0) return;
+      const computed = window.getComputedStyle(child);
+      const originalPx = Number.parseFloat(computed.marginTop || "0") || 0;
+      child.dataset.wordOriginalPagePushMt = child.style.marginTop || "";
+      child.dataset.wordPagePush = "true";
       child.style.marginTop = `${originalPx + pushPx}px`;
     });
-  }, [normalizeTopLevelBlocks, pageFlow, pagePeriodPx, writingAreaHeightPx]);
+  }, [clearVerticalParagraphPushes, pagePeriodPx, writingAreaHeightPx]);
+
+  const applyVerticalPageOffsets = useCallback(() => {
+    const node = localEditorRef.current;
+    if (!node) return;
+    if (isVerticalMultiColumn) {
+      clearVerticalParagraphPushes();
+      applyMultiColumnPageWrappers();
+      return;
+    }
+    unwrapPageWrappers();
+    normalizeTopLevelBlocks();
+    clearAutoPageOffsets();
+    applyVerticalParagraphPushes();
+  }, [
+    applyMultiColumnPageWrappers,
+    applyVerticalParagraphPushes,
+    clearAutoPageOffsets,
+    clearVerticalParagraphPushes,
+    isVerticalMultiColumn,
+    normalizeTopLevelBlocks,
+    unwrapPageWrappers,
+  ]);
 
   const correctSelectionPageGap = useCallback(() => {
-    const node = localEditorRef.current;
-    if (!node || pageFlow !== "vertical") return;
-
-    const selection = window.getSelection();
-    if (!selection?.rangeCount) return;
-
-    const range = selection.getRangeAt(0);
-    if (!node.contains(range.startContainer)) return;
-
-    const block = getSelectionPageBlock();
-    if (!block) return;
-
-    const editorRect = node.getBoundingClientRect();
-    const caretRect = range.getBoundingClientRect();
-    const caretY =
-      caretRect.height > 0 || caretRect.width > 0
-        ? caretRect.top - editorRect.top
-        : block.offsetTop;
-    const caretInPage = positiveModulo(caretY, pagePeriodPx);
-    const blockInPage = positiveModulo(block.offsetTop, pagePeriodPx);
-    const blockFits = blockInPage + block.offsetHeight <= writingAreaHeightPx;
-
-    if (caretInPage <= writingAreaHeightPx && blockFits) return;
-
-    const pushPx = pagePeriodPx - blockInPage;
-    const original = block.dataset.wordOriginalMarginTop ?? block.style.marginTop ?? "";
-    const originalPx = cssLengthToPx(original);
-    block.dataset.wordOriginalMarginTop = original;
-    block.dataset.wordAutoBreak = "true";
-    block.style.marginTop = `${originalPx + pushPx}px`;
-    placeCaretAtEnd(block);
-  }, [getSelectionPageBlock, pageFlow, pagePeriodPx, placeCaretAtEnd, writingAreaHeightPx]);
+    clearAutoPageOffsets();
+  }, [clearAutoPageOffsets]);
 
   const updatePageCount = useCallback(() => {
     const node = localEditorRef.current;
     if (!node) return;
+    paginationMutatingRef.current = true;
+    node.dataset.wordPaginating = "true";
     applyVerticalPageOffsets();
     correctSelectionPageGap();
+    window.requestAnimationFrame(() => {
+      paginationMutatingRef.current = false;
+      if (node.dataset.wordPaginating === "true") {
+        delete node.dataset.wordPaginating;
+      }
+    });
     let nextPageCount = 1;
-    if (pageFlow === "horizontal") {
+    if (isVerticalMultiColumn) {
+      nextPageCount = Math.max(
+        1,
+        node.querySelectorAll<HTMLElement>(`[${PAGE_WRAPPER_ATTR}]`).length
+      );
+    } else if (effectivePageFlow === "horizontal") {
       const style = window.getComputedStyle(node);
       const columnGap = Number.parseFloat(style.columnGap || "0") || 0;
       const columnWidth =
@@ -652,12 +798,17 @@ export const EditorView = forwardRef(function EditorView(
     applyVerticalPageOffsets,
     correctSelectionPageGap,
     columns,
-    pageFlow,
+    effectivePageFlow,
+    isVerticalMultiColumn,
     pagePeriodPx,
     writingAreaHeightPx,
   ]);
   const schedulePageCountUpdate = useCallback(() => {
-    window.requestAnimationFrame(updatePageCount);
+    if (pageCountFrameRef.current !== null) return;
+    pageCountFrameRef.current = window.requestAnimationFrame(() => {
+      pageCountFrameRef.current = null;
+      updatePageCount();
+    });
   }, [updatePageCount]);
   const handleInsertPageBreak = useCallback(() => {
     exec(
@@ -693,7 +844,7 @@ export const EditorView = forwardRef(function EditorView(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const node = localEditorRef.current;
       if (!node) return;
-      if (pageFlow === "vertical") {
+      if (effectivePageFlow === "vertical") {
         const editorRect = node.getBoundingClientRect();
         const pointerY = e.clientY - editorRect.top;
         const pointerInPage = positiveModulo(pointerY, pagePeriodPx);
@@ -725,8 +876,8 @@ export const EditorView = forwardRef(function EditorView(
     },
     [
       correctSelectionPageGap,
+      effectivePageFlow,
       focusEditorWithoutScroll,
-      pageFlow,
       pagePeriodPx,
       placeCaretAtEnd,
       placeCaretAtStart,
@@ -739,13 +890,24 @@ export const EditorView = forwardRef(function EditorView(
       setPageCount(1);
       updatePageCount();
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [columns, marginsId, orientation, pageFlow, pageLayoutId, updatePageCount]);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (pageCountFrameRef.current !== null) {
+        window.cancelAnimationFrame(pageCountFrameRef.current);
+        pageCountFrameRef.current = null;
+      }
+    };
+  }, [columns, effectivePageFlow, marginsId, orientation, pageLayoutId, updatePageCount]);
 
   useEffect(() => {
     const node = localEditorRef.current;
     if (!node) return;
-    const observer = new ResizeObserver(schedulePageCountUpdate);
+    const observer = new ResizeObserver(() => {
+      if (paginationMutatingRef.current || node.dataset.wordPaginating === "true") {
+        return;
+      }
+      schedulePageCountUpdate();
+    });
     observer.observe(node);
     schedulePageCountUpdate();
     return () => observer.disconnect();
@@ -754,7 +916,10 @@ export const EditorView = forwardRef(function EditorView(
   useEffect(() => {
     const node = localEditorRef.current;
     if (!node) return;
-    const observer = new MutationObserver(schedulePageCountUpdate);
+    const observer = new MutationObserver(() => {
+      if (node.dataset.wordPaginating === "true") return;
+      schedulePageCountUpdate();
+    });
     observer.observe(node, {
       childList: true,
       characterData: true,
@@ -912,6 +1077,15 @@ export const EditorView = forwardRef(function EditorView(
         <span className="ml-auto text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono">
           {stats.words} words - {stats.chars} chars
         </span>
+        <button
+          type="button"
+          onClick={onForceSave}
+          title="Save now (Ctrl+S)"
+          className="flex items-center gap-1 px-2 py-1 border border-[var(--ch-border-subtle)] rounded-sm text-[9px] uppercase tracking-widest font-mono text-[var(--ch-text-muted)] hover:border-[#FFB347]/40 hover:text-[var(--ch-accent)] transition-colors"
+        >
+          <Save className="w-3 h-3" />
+          Save
+        </button>
         <span
           className={`text-[9px] uppercase tracking-widest font-mono ${
             isSaving
@@ -924,7 +1098,7 @@ export const EditorView = forwardRef(function EditorView(
         <input
           ref={fileInputRef}
           type="file"
-          accept=".html,.htm,.md,.markdown,.txt,.rtf"
+          accept=".docx,.html,.htm,.md,.markdown,.txt,.rtf"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -979,7 +1153,12 @@ export const EditorView = forwardRef(function EditorView(
         </div>
       </header>
 
-      <RibbonTabs active={activeRibbon} onChange={setActiveRibbon} />
+      <RibbonTabs
+        active={activeRibbon}
+        onChange={setActiveRibbon}
+        zoom={zoom}
+        onZoomChange={handleZoomChange}
+      />
 
       <div className="px-3 py-1.5 border-b border-[var(--ch-border-subtle)] flex items-center gap-1 shrink-0 flex-wrap min-h-[44px]">
         {activeRibbon === "home" && (
@@ -1024,7 +1203,7 @@ export const EditorView = forwardRef(function EditorView(
             pageFlow={pageFlow}
             onPageFlowChange={setPageFlow}
             zoom={zoom}
-            onZoomChange={setZoom}
+            onZoomChange={handleZoomChange}
             showFormatting={showFormatting}
             onShowFormattingChange={setShowFormatting}
           />
@@ -1106,7 +1285,7 @@ export const EditorView = forwardRef(function EditorView(
         <div
           ref={stripRef}
           className={`word-page-strip relative mx-auto ${
-            pageFlow === "vertical" ? "word-page-strip-vertical" : ""
+            effectivePageFlow === "vertical" ? "word-page-strip-vertical" : ""
           }`}
           style={{
             ...stripStyle,
@@ -1116,7 +1295,7 @@ export const EditorView = forwardRef(function EditorView(
         >
           <div
             className={`absolute inset-0 flex pointer-events-none ${
-              pageFlow === "horizontal"
+              effectivePageFlow === "horizontal"
                 ? "items-start"
                 : "items-center flex-col"
             }`}
@@ -1128,15 +1307,29 @@ export const EditorView = forwardRef(function EditorView(
                 style={{
                   ...pageStyle,
                   marginLeft:
-                    pageFlow === "horizontal" && page !== 0
-                      ? PAGE_GAP_PX
+                    effectivePageFlow === "horizontal" && page !== 0
+                      ? horizontalPageGapPx
                       : undefined,
                   marginTop:
-                    pageFlow === "vertical" && page !== 0
-                      ? PAGE_GAP_PX
+                    effectivePageFlow === "vertical" && page !== 0
+                      ? verticalPageGapPx
                       : undefined,
                 }}
-              />
+              >
+                {columnRuleOffsets.map((left) => (
+                  <div
+                    key={left}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left,
+                      top: marginTopPx,
+                      width: 1,
+                      height: writingAreaHeightPx,
+                      backgroundColor: "var(--word-page-rule)",
+                    }}
+                  />
+                ))}
+              </div>
             ))}
           </div>
           <div
@@ -1170,6 +1363,9 @@ export const EditorView = forwardRef(function EditorView(
           min-width: 0;
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .word-page-content {
+          overflow: visible;
         }
         .word-editor-surface :where(p, h1, h2, h3, li, blockquote, div) {
           max-width: 100%;
@@ -1277,6 +1473,22 @@ export const EditorView = forwardRef(function EditorView(
         .word-editor-surface a {
           color: #0f6c3f;
           text-decoration: underline;
+        }
+        .word-editor-surface img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0.35em 0;
+        }
+        .word-editor-surface table {
+          max-width: 100%;
+          border-collapse: collapse;
+          table-layout: auto;
+        }
+        .word-editor-surface td,
+        .word-editor-surface th {
+          vertical-align: top;
+          overflow-wrap: anywhere;
         }
         .word-editor-surface ::selection {
           background: rgba(255, 179, 71, 0.22);

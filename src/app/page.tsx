@@ -787,7 +787,7 @@ export default function Home() {
                         Layout
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
-                        {LAYOUTS.map((opt) => {
+                        {LAYOUTS.filter((opt) => opt.id !== "foundations").map((opt) => {
                           const isActive = layout === opt.id;
                           return (
                             <button

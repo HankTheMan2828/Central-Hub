@@ -9,16 +9,21 @@ import { AIPanel, type AIPanelHandle } from "./wordtab/AIPanel";
 import {
   backupDoc,
   createDoc,
-  deleteDoc,
-  duplicateDoc,
   getActiveDocPath,
   getWorkingDir,
   listBackups,
   migrateLegacyDocs,
+  pickFile,
+  readDocLayout,
+  readFileBytes,
+  readFileText,
   readBackup,
   readDoc,
   setActiveDocPath,
+  setWorkingDir,
   writeDoc,
+  writeDocLayout,
+  type DocLayoutSidecar,
 } from "./wordtab/docStore";
 import type { BackupEntry, WordDoc } from "./wordtab/types";
 import {
@@ -26,7 +31,12 @@ import {
   htmlToMarkdown,
   type ExportFormat,
 } from "./wordtab/exporters";
-import { importFile, sanitizeHtml } from "./wordtab/importers";
+import {
+  importFile,
+  importDocxDocument,
+  importTextDocument,
+  sanitizeHtml,
+} from "./wordtab/importers";
 
 const SAVE_DEBOUNCE_MS = 600;
 const DEFAULT_PAGE_LAYOUT_ID = "letter";
@@ -88,6 +98,20 @@ function cleanEditorHtml(editor: HTMLElement): string {
     delete el.dataset.wordOriginalMarginTop;
     delete el.dataset.wordAutoBreak;
   });
+  clone.querySelectorAll<HTMLElement>("[data-word-page-push]").forEach((el) => {
+    el.style.marginTop = el.dataset.wordOriginalPagePushMt ?? "";
+    if (!el.getAttribute("style")) {
+      el.removeAttribute("style");
+    }
+    delete el.dataset.wordOriginalPagePushMt;
+    delete el.dataset.wordPagePush;
+  });
+  clone.querySelectorAll<HTMLElement>("[data-word-page-wrapper]").forEach((el) => {
+    while (el.firstChild) {
+      el.parentNode?.insertBefore(el.firstChild, el);
+    }
+    el.remove();
+  });
   return clone.innerHTML;
 }
 
@@ -100,6 +124,18 @@ function htmlToPlainText(html: string): string {
 
 function htmlToSnippet(html: string): string {
   return htmlToPlainText(html).slice(0, 140);
+}
+
+function filenameFromPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() || path;
+}
+
+function isInternalDocPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".json");
+}
+
+function isDocxPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".docx");
 }
 
 type Props = {
@@ -120,6 +156,10 @@ export function WordTab({
   const saveTimerRef = useRef<number | null>(null);
   const activeDocRef = useRef<WordDoc | null>(null);
   const activeDocPathRef = useRef<string | null>(null);
+  // True when the active doc is a preview of a non-internal format (e.g. .docx)
+  // that hasn't been promoted to a .json on disk yet. Auto-save is suspended
+  // for transient docs; manual Save promotes them via saveTransient.
+  const activeDocTransientRef = useRef(false);
   const aiPanelRef = useRef<AIPanelHandle | null>(null);
   const pageLayoutRef = useRef(DEFAULT_PAGE_LAYOUT_ID);
   const pageColorRef = useRef(DEFAULT_PAGE_COLOR_ID);
@@ -160,7 +200,10 @@ export function WordTab({
   const [backupTick, setBackupTick] = useState(0);
   const [latestBackup, setLatestBackup] = useState<BackupEntry | null>(null);
   const [pendingOpen, setPendingOpen] = useState<
-    { path: string; title: string; hadMessages: boolean } | null
+    { path: string; title: string; hadMessages: boolean; transient: boolean } | null
+  >(null);
+  const [pendingFolderSwitch, setPendingFolderSwitch] = useState<
+    { folder: string } | null
   >(null);
   const [aiPortalTarget, setAiPortalTarget] = useState<HTMLElement | null>(null);
   const [savesPortalTarget, setSavesPortalTarget] = useState<HTMLElement | null>(
@@ -174,8 +217,9 @@ export function WordTab({
   }, []);
 
   const applyDoc = useCallback(
-    (doc: WordDoc | null, path: string | null) => {
+    (doc: WordDoc | null, path: string | null, transient: boolean = false) => {
       activeDocRef.current = doc;
+      activeDocTransientRef.current = transient;
       setActiveDoc(doc);
       setActivePath(path);
       if (!editorRef.current) return;
@@ -220,7 +264,7 @@ export function WordTab({
       setLineSpacing(nextLineSpacing);
       setParagraphSpacingBeforePt(nextParagraphBefore);
       setParagraphSpacingAfterPt(nextParagraphAfter);
-      setSavedAt(doc.updatedAt);
+      setSavedAt(transient ? null : doc.updatedAt);
       const text = editorRef.current.innerText ?? "";
       setStats({ words: countWords(text), chars: text.length });
       pushWordDocToMain(htmlToMarkdown(editorRef.current)).catch(() => {});
@@ -248,6 +292,12 @@ export function WordTab({
     const path = activeDocPathRef.current;
     const existing = activeDocRef.current;
     if (!path || !existing || !editorRef.current) {
+      setIsSaving(false);
+      return;
+    }
+    // Transient docs (e.g. a .docx being previewed) are NOT writable in place —
+    // we'd corrupt the source. Manual Save uses saveTransient instead.
+    if (activeDocTransientRef.current) {
       setIsSaving(false);
       return;
     }
@@ -301,6 +351,10 @@ export function WordTab({
 
   const scheduleSave = useCallback(() => {
     if (!hydrated) return;
+    if (!activeDocPathRef.current) return;
+    // Transient docs (preview from non-internal formats) don't auto-save —
+    // the user has to hit the manual Save button to promote them to a .json.
+    if (activeDocTransientRef.current) return;
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
     }
@@ -309,6 +363,48 @@ export function WordTab({
       flushSave().catch(() => setIsSaving(false));
     }, SAVE_DEBOUNCE_MS);
   }, [flushSave, hydrated]);
+
+  const saveTransient = useCallback(async () => {
+    const existing = activeDocRef.current;
+    const editor = editorRef.current;
+    if (!existing || !editor) return;
+    const html = cleanEditorHtml(editor);
+    const folder = workingDir ?? (await getWorkingDir());
+    const created = await createDoc(folder, title || existing.title);
+    const doc: WordDoc = {
+      ...created.doc,
+      title: title || existing.title,
+      html,
+      snippet: htmlToSnippet(html),
+      pageLayoutId: pageLayoutRef.current,
+      pageColorId: pageColorRef.current,
+      orientation: orientationRef.current,
+      marginsId: marginsIdRef.current,
+      columns: columnsRef.current,
+      fontFamilyId: fontFamilyIdRef.current,
+      fontSizePt: fontSizePtRef.current,
+      lineSpacing: lineSpacingRef.current,
+      paragraphSpacingBeforePt: paragraphSpacingBeforePtRef.current,
+      paragraphSpacingAfterPt: paragraphSpacingAfterPtRef.current,
+      updatedAt: Date.now(),
+    };
+    await writeDoc(doc, created.path);
+    activeDocRef.current = doc;
+    activeDocTransientRef.current = false;
+    setActiveDoc(doc);
+    setActivePath(created.path);
+    setSavedAt(doc.updatedAt);
+    setRefreshSaves((tick) => tick + 1);
+    pushWordDocToMain(htmlToMarkdown(editor)).catch(() => {});
+  }, [setActivePath, title, workingDir]);
+
+  const handleForceSave = useCallback(() => {
+    if (activeDocTransientRef.current && activeDocRef.current) {
+      saveTransient().catch(() => {});
+    } else if (activeDocPathRef.current) {
+      flushSave().catch(() => {});
+    }
+  }, [flushSave, saveTransient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -417,13 +513,36 @@ export function WordTab({
     setTick((t) => t + 1);
   }, []);
 
+  // For transient previews (.docx and other non-.json formats) the editor
+  // can't autosave the body into the source file, but we still want page
+  // settings to persist per-doc. Mirror them into a `<path>.layout.json`
+  // sidecar whenever the user tweaks them.
+  const persistLayoutSidecar = useCallback(() => {
+    const path = activeDocPathRef.current;
+    if (!path || !activeDocTransientRef.current) return;
+    const layout: DocLayoutSidecar = {
+      pageLayoutId: pageLayoutRef.current,
+      pageColorId: pageColorRef.current,
+      orientation: orientationRef.current,
+      marginsId: marginsIdRef.current,
+      columns: columnsRef.current,
+      fontFamilyId: fontFamilyIdRef.current,
+      fontSizePt: fontSizePtRef.current,
+      lineSpacing: lineSpacingRef.current,
+      paragraphSpacingBeforePt: paragraphSpacingBeforePtRef.current,
+      paragraphSpacingAfterPt: paragraphSpacingAfterPtRef.current,
+    };
+    writeDocLayout(path, layout).catch(() => {});
+  }, []);
+
   const handlePageLayoutChange = useCallback(
     (id: string) => {
       pageLayoutRef.current = id;
       setPageLayoutId(id);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handlePageColorChange = useCallback(
@@ -431,8 +550,9 @@ export function WordTab({
       pageColorRef.current = id;
       setPageColorId(id);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleOrientationChange = useCallback(
@@ -440,8 +560,9 @@ export function WordTab({
       orientationRef.current = next;
       setOrientation(next);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleMarginsChange = useCallback(
@@ -449,8 +570,9 @@ export function WordTab({
       marginsIdRef.current = id;
       setMarginsId(id);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleColumnsChange = useCallback(
@@ -458,8 +580,9 @@ export function WordTab({
       columnsRef.current = next;
       setColumns(next);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleFontFamilyChange = useCallback(
@@ -467,8 +590,9 @@ export function WordTab({
       fontFamilyIdRef.current = id;
       setFontFamilyId(id);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleFontSizeChange = useCallback(
@@ -476,8 +600,9 @@ export function WordTab({
       fontSizePtRef.current = size;
       setFontSizePt(size);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const handleSpacingChange = useCallback(
@@ -489,8 +614,9 @@ export function WordTab({
       setParagraphSpacingBeforePt(before);
       setParagraphSpacingAfterPt(after);
       scheduleSave();
+      persistLayoutSidecar();
     },
-    [scheduleSave]
+    [persistLayoutSidecar, scheduleSave]
   );
 
   const performOpen = useCallback(
@@ -504,40 +630,139 @@ export function WordTab({
     [applyDoc, flushSave, onSubTabChange]
   );
 
+  const openByPath = useCallback(
+    async (
+      path: string,
+      parent?: string | null,
+      options?: { transient?: boolean }
+    ): Promise<void> => {
+      if (isInternalDocPath(path)) {
+        await performOpen(path);
+        return;
+      }
+      await flushSave();
+      const name = filenameFromPath(path);
+      const imported = isDocxPath(path)
+        ? await importDocxDocument(name, await readFileBytes(path))
+        : importTextDocument(name, await readFileText(path));
+      if (options?.transient) {
+        // Preview-only: hold the imported content in the editor without writing
+        // a .json copy. We keep the source path active so the tile in Saves
+        // still highlights and the switch-doc modal still gates on it. The
+        // user's manual Save promotes the preview to a real .json doc.
+        const now = Date.now();
+        // Per-file page-layout sidecar — when the user has tweaked the
+        // orientation/margins/columns/etc. for this doc before, those settings
+        // come back on reopen instead of falling back to global defaults.
+        const layout = await readDocLayout(path).catch(() => null);
+        const transientDoc: WordDoc = {
+          id: `transient-${now}-${Math.random().toString(36).slice(2, 8)}`,
+          title: imported.title,
+          html: imported.html,
+          snippet: htmlToSnippet(imported.html),
+          pageColorId: layout?.pageColorId ?? DEFAULT_PAGE_COLOR_ID,
+          pageLayoutId: layout?.pageLayoutId,
+          orientation: layout?.orientation,
+          marginsId: layout?.marginsId,
+          columns: layout?.columns,
+          fontFamilyId: layout?.fontFamilyId,
+          fontSizePt: layout?.fontSizePt,
+          lineSpacing: layout?.lineSpacing,
+          paragraphSpacingBeforePt: layout?.paragraphSpacingBeforePt,
+          paragraphSpacingAfterPt: layout?.paragraphSpacingAfterPt,
+          createdAt: now,
+          updatedAt: now,
+        };
+        applyDoc(transientDoc, path, true);
+        onSubTabChange("editor");
+        return;
+      }
+      const folder = parent || workingDir || (await getWorkingDir());
+      const created = await createDoc(folder, imported.title);
+      const doc: WordDoc = {
+        ...created.doc,
+        title: imported.title,
+        html: imported.html,
+        snippet: htmlToSnippet(imported.html),
+        pageColorId: DEFAULT_PAGE_COLOR_ID,
+        updatedAt: Date.now(),
+      };
+      const written = await writeDoc(doc, created.path);
+      applyDoc(doc, written.path);
+      setRefreshSaves((tick) => tick + 1);
+      onSubTabChange("editor");
+    },
+    [applyDoc, flushSave, onSubTabChange, performOpen, workingDir]
+  );
+
   const handleOpen = useCallback(
     async (path: string) => {
+      // Tile clicks on non-internal formats preview-only — no .json duplicate
+      // is written until the user explicitly saves.
+      const transient = !isInternalDocPath(path);
       if (activeDocPathRef.current && path !== activeDocPathRef.current) {
-        const result = await readDoc(path);
-        if (!result.doc) return;
+        let title = filenameFromPath(path);
+        if (isInternalDocPath(path)) {
+          const result = await readDoc(path);
+          if (!result.doc) return;
+          title = result.doc.title;
+        }
         setPendingOpen({
           path,
-          title: result.doc.title,
+          title,
           hadMessages: aiPanelRef.current?.hasMessages() ?? false,
+          transient,
         });
         return;
       }
-      await performOpen(path);
+      await openByPath(path, undefined, { transient });
     },
-    [performOpen]
+    [openByPath]
   );
 
   const confirmOpenContinue = useCallback(() => {
     if (!pendingOpen) return;
-    const path = pendingOpen.path;
+    const { path, transient } = pendingOpen;
     setPendingOpen(null);
-    performOpen(path).catch(() => {});
-  }, [pendingOpen, performOpen]);
+    openByPath(path, undefined, { transient }).catch(() => {});
+  }, [openByPath, pendingOpen]);
 
   const confirmOpenNewChat = useCallback(() => {
     if (!pendingOpen) return;
-    const path = pendingOpen.path;
+    const { path, transient } = pendingOpen;
     setPendingOpen(null);
-    performOpen(path).catch(() => {});
+    openByPath(path, undefined, { transient }).catch(() => {});
     aiPanelRef.current?.restart().catch(() => {});
-  }, [pendingOpen, performOpen]);
+  }, [openByPath, pendingOpen]);
 
   const cancelOpen = useCallback(() => {
     setPendingOpen(null);
+  }, []);
+
+  const handleOpenFromDisk = useCallback(async () => {
+    const picked = await pickFile(workingDir ?? undefined);
+    if (!picked) return;
+    await openByPath(picked.path, picked.parent);
+    if (picked.parent && picked.parent !== workingDir) {
+      setPendingFolderSwitch({ folder: picked.parent });
+    }
+  }, [openByPath, workingDir]);
+
+  const confirmFolderSwitch = useCallback(async () => {
+    if (!pendingFolderSwitch) return;
+    const folder = pendingFolderSwitch.folder;
+    setPendingFolderSwitch(null);
+    try {
+      await setWorkingDir(folder);
+      setWorkingDirState(folder);
+      setRefreshSaves((tick) => tick + 1);
+    } catch {
+      // Ignore errors switching folders.
+    }
+  }, [pendingFolderSwitch]);
+
+  const cancelFolderSwitch = useCallback(() => {
+    setPendingFolderSwitch(null);
   }, []);
 
   const handleNew = useCallback(async () => {
@@ -553,29 +778,6 @@ export function WordTab({
       titleRef.current?.select();
     }, 50);
   }, [applyDoc, flushSave, onSubTabChange, workingDir]);
-
-  const handleDelete = useCallback(
-    async (path: string) => {
-      await deleteDoc(path);
-      if (activeDocPathRef.current === path) {
-        applyDoc(null, null);
-        onSubTabChange("saves");
-      }
-      setRefreshSaves((tick) => tick + 1);
-    },
-    [applyDoc, onSubTabChange]
-  );
-
-  const handleDuplicate = useCallback(
-    async (path: string) => {
-      await flushSave();
-      const result = await duplicateDoc(path);
-      applyDoc(result.doc, result.path);
-      setRefreshSaves((tick) => tick + 1);
-      onSubTabChange("editor");
-    },
-    [applyDoc, flushSave, onSubTabChange]
-  );
 
   const savedAtLabel = savedAt
     ? `Saved ${formatRelative(savedAt)}`
@@ -665,14 +867,11 @@ export function WordTab({
       onOpen={(path) => {
         handleOpen(path).catch(() => {});
       }}
+      onOpenFromDisk={() => {
+        handleOpenFromDisk().catch(() => {});
+      }}
       onNew={() => {
         handleNew().catch(() => {});
-      }}
-      onDelete={(path) => {
-        handleDelete(path).catch(() => {});
-      }}
-      onDuplicate={(path) => {
-        handleDuplicate(path).catch(() => {});
       }}
     />
   );
@@ -691,12 +890,14 @@ export function WordTab({
           onInput={handleInput}
           onPaste={handlePaste}
           onSelection={handleSelection}
-          onForceSave={() => {
-            flushSave().catch(() => {});
-          }}
+          onForceSave={handleForceSave}
           onExport={handleExport}
           onImport={(file) => {
-            handleImport(file).catch(() => {});
+            handleImport(file).catch((err: unknown) => {
+              const message =
+                err instanceof Error ? err.message : "Could not import that file.";
+              window.alert(message);
+            });
           }}
           canRestoreBackup={Boolean(latestBackup)}
           onRestoreBackup={() => {
@@ -791,6 +992,44 @@ export function WordTab({
                 className="px-2 py-1.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm text-[10px] uppercase tracking-wider font-mono transition-colors"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingFolderSwitch && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={cancelFolderSwitch}
+        >
+          <div
+            className="border border-[var(--ch-border)] bg-[var(--ch-bg-base)] rounded-sm shadow-2xl p-4 max-w-sm w-[90%] flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--ch-accent)]">
+              Switch Saves folder?
+            </div>
+            <div className="text-[11px] text-[var(--ch-text)] leading-relaxed">
+              This doc lives in
+              <span className="text-[var(--ch-accent)]"> {pendingFolderSwitch.folder}</span>.
+              Show that folder in the Saves panel?
+            </div>
+            <div className="flex flex-col gap-1.5 mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  confirmFolderSwitch().catch(() => {});
+                }}
+                className="px-2 py-1.5 border border-[#FFB347]/40 text-[var(--ch-accent)] hover:bg-[var(--ch-accent-10)] rounded-sm text-[10px] uppercase tracking-wider font-mono transition-colors"
+              >
+                Switch
+              </button>
+              <button
+                type="button"
+                onClick={cancelFolderSwitch}
+                className="px-2 py-1.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm text-[10px] uppercase tracking-wider font-mono transition-colors"
+              >
+                Keep current folder
               </button>
             </div>
           </div>

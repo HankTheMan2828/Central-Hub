@@ -1,4 +1,114 @@
+import mammoth from "mammoth";
+import {
+  dominantRunStyleString,
+  extractDocxProperties,
+  paragraphStyleString,
+  type ParagraphProps,
+} from "./docxProperties";
 import { markdownToHtml } from "./markdownToHtml";
+
+// Block elements in mammoth's output that correspond 1:1 with a docx <w:p>.
+// Order in the HTML is the same as paragraph order in document.xml, so we
+// can zip them with the extracted property list to overlay formatting that
+// mammoth strips by default.
+const DOCX_BLOCK_TAGS = new Set([
+  "P",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "LI",
+  "BLOCKQUOTE",
+  "PRE",
+]);
+
+function mergeStyleString(existing: string, addition: string): string {
+  if (!addition) return existing;
+  if (!existing) return addition;
+  const trimmed = existing.trim().replace(/;\s*$/, "");
+  return `${trimmed}; ${addition}`;
+}
+
+function applyDocxParagraphFormatting(
+  html: string,
+  paragraphs: ParagraphProps[]
+): string {
+  if (!paragraphs.length) return html;
+  const doc = new DOMParser().parseFromString(
+    `<div>${html}</div>`,
+    "text/html"
+  );
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+
+  // Collect block elements in document order across the entire subtree —
+  // mammoth nests <li> inside <ul>/<ol>, but each <li> still maps to a
+  // single docx paragraph, so a flat in-order walk works.
+  const blocks: HTMLElement[] = [];
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      return DOCX_BLOCK_TAGS.has((node as HTMLElement).tagName)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP;
+    },
+  });
+  let current = walker.nextNode();
+  while (current) {
+    blocks.push(current as HTMLElement);
+    current = walker.nextNode();
+  }
+
+  const count = Math.min(blocks.length, paragraphs.length);
+  for (let i = 0; i < count; i++) {
+    const el = blocks[i];
+    const props = paragraphs[i];
+    const paraStyle = paragraphStyleString(props);
+    const runStyle = dominantRunStyleString(props);
+    const combined = mergeStyleString(paraStyle, runStyle);
+    if (combined) {
+      el.setAttribute(
+        "style",
+        mergeStyleString(el.getAttribute("style") || "", combined)
+      );
+    }
+  }
+
+  // Convert any literal tab characters in text nodes to a styled inline span
+  // so they render as visible whitespace at a default tab stop rather than
+  // collapsing into a single space.
+  const textWalker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const tabHosts: Text[] = [];
+  let textNode = textWalker.nextNode();
+  while (textNode) {
+    if ((textNode.nodeValue || "").includes("\t")) {
+      tabHosts.push(textNode as Text);
+    }
+    textNode = textWalker.nextNode();
+  }
+  tabHosts.forEach((node) => {
+    const value = node.nodeValue || "";
+    const parts = value.split("\t");
+    const fragment = doc.createDocumentFragment();
+    parts.forEach((part, index) => {
+      if (part) fragment.appendChild(doc.createTextNode(part));
+      if (index < parts.length - 1) {
+        const tab = doc.createElement("span");
+        tab.setAttribute("data-word-tab", "true");
+        tab.setAttribute(
+          "style",
+          "display: inline-block; min-width: 0.5in; white-space: pre;"
+        );
+        tab.appendChild(doc.createTextNode(" "));
+        fragment.appendChild(tab);
+      }
+    });
+    node.parentNode?.replaceChild(fragment, node);
+  });
+
+  return root.innerHTML;
+}
 
 export type ImportResult = {
   title: string;
@@ -15,20 +125,40 @@ const ALLOWED_TAGS = new Set([
 const STYLE_PROPS = new Set([
   "color",
   "background-color",
+  "display",
   "font-family",
   "font-size",
   "font-weight",
   "font-style",
+  "line-height",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "margin-bottom",
+  "min-width",
+  "mso-list",
+  "padding-left",
+  "padding-right",
+  "text-indent",
   "text-decoration",
   "text-align",
+  "text-transform",
+  "vertical-align",
+  "white-space",
 ]);
+const MAX_IMPORTED_IMAGE_EDGE_PX = 1600;
+
+type MammothImage = {
+  contentType: string;
+  readAsArrayBuffer: () => Promise<ArrayBuffer>;
+};
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function titleFromFile(file: File): string {
-  return file.name.replace(/\.[^.]+$/, "") || "Imported document";
+function titleFromName(name: string): string {
+  return name.replace(/\.[^.]+$/, "") || "Imported document";
 }
 
 function safeUrl(value: string, allowImageData = false): string | null {
@@ -82,6 +212,12 @@ export function sanitizeHtml(html: string): string {
       if (name === "style") {
         const style = cleanStyle(value);
         if (style) next.setAttribute("style", style);
+        return;
+      }
+      // Preserve our own data-word-* hooks (e.g. data-word-tab,
+      // data-word-page-break) — they drive editor-side rendering.
+      if (name.startsWith("data-word-")) {
+        next.setAttribute(name, value);
         return;
       }
       if (tag === "a" && (name === "href" || name === "title")) {
@@ -138,21 +274,144 @@ function rtfToText(rtf: string): string {
     .trim();
 }
 
-export async function importFile(file: File): Promise<ImportResult> {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const text = await file.text();
-  const title = titleFromFile(file);
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const chunk = bytes.subarray(offset, offset + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function convertDocxImage(image: MammothImage): Promise<{ src: string }> {
+  const arrayBuffer = await image.readAsArrayBuffer();
+  if (
+    typeof document === "undefined" ||
+    typeof Blob === "undefined" ||
+    typeof createImageBitmap === "undefined"
+  ) {
+    return {
+      src: `data:${image.contentType};base64,${arrayBufferToBase64(arrayBuffer)}`,
+    };
+  }
+
+  try {
+    const blob = new Blob([arrayBuffer], { type: image.contentType });
+    const bitmap = await createImageBitmap(blob);
+    const largestEdge = Math.max(bitmap.width, bitmap.height);
+    if (largestEdge <= MAX_IMPORTED_IMAGE_EDGE_PX) {
+      bitmap.close();
+      return {
+        src: `data:${image.contentType};base64,${arrayBufferToBase64(arrayBuffer)}`,
+      };
+    }
+
+    const scale = MAX_IMPORTED_IMAGE_EDGE_PX / largestEdge;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return {
+        src: `data:${image.contentType};base64,${arrayBufferToBase64(arrayBuffer)}`,
+      };
+    }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const outputType = image.contentType === "image/png" ? "image/png" : "image/jpeg";
+    return { src: canvas.toDataURL(outputType, 0.86) };
+  } catch {
+    return {
+      src: `data:${image.contentType};base64,${arrayBufferToBase64(arrayBuffer)}`,
+    };
+  }
+}
+
+function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+export async function importDocxDocument(
+  name: string,
+  input: ArrayBuffer | Uint8Array
+): Promise<ImportResult> {
+  const arrayBuffer =
+    input instanceof ArrayBuffer ? input : bytesToArrayBuffer(input);
+  // Mammoth handles structure (paragraphs, runs, lists, tables, headings,
+  // images) but throws away direct formatting (alignment, indent, spacing,
+  // font sizes, tab stops). We run mammoth and the raw-XML property
+  // extractor in parallel and overlay the extracted styles onto mammoth's
+  // HTML before sanitizing.
+  const [result, extracted] = await Promise.all([
+    mammoth.convertToHtml(
+      { arrayBuffer },
+      { convertImage: mammoth.images.imgElement(convertDocxImage) }
+    ),
+    extractDocxProperties(arrayBuffer).catch(() => ({ paragraphs: [] })),
+  ]);
+  const enriched = applyDocxParagraphFormatting(
+    result.value,
+    extracted.paragraphs
+  );
+  return {
+    title: titleFromName(name),
+    html: sanitizeHtml(enriched),
+    notes: result.messages.map((message) => message.message),
+  };
+}
+
+export function importTextDocument(
+  name: string,
+  text: string,
+  type = ""
+): ImportResult {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const title = titleFromName(name);
+  if (ext === "docx") {
+    throw new Error("DOCX files must be imported as binary files.");
+  }
+  if (ext === "doc" || type === "application/msword") {
+    throw new Error(
+      "Legacy .doc files are not supported. Please convert the file to .docx and try again."
+    );
+  }
   if (ext === "md" || ext === "markdown") {
     return { title, html: sanitizeHtml(markdownToHtml(text)) };
   }
-  if (ext === "html" || ext === "htm" || file.type === "text/html") {
+  if (ext === "html" || ext === "htm" || type === "text/html") {
     return { title, html: sanitizeHtml(text) };
   }
   if (ext === "rtf") {
-    return { title, html: txtToHtml(rtfToText(text)), notes: ["RTF formatting was simplified."] };
+    return {
+      title,
+      html: txtToHtml(rtfToText(text)),
+      notes: ["RTF formatting was simplified."],
+    };
   }
-  if (ext === "txt" || file.type.startsWith("text/")) {
+  if (ext === "txt" || type.startsWith("text/")) {
     return { title, html: txtToHtml(text) };
   }
   throw new Error("This file type is not supported yet.");
+}
+
+export async function importFile(file: File): Promise<ImportResult> {
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".doc") || file.type === "application/msword") {
+    throw new Error(
+      "Legacy .doc files are not supported. Please convert the file to .docx and try again."
+    );
+  }
+  if (
+    lowerName.endsWith(".docx") ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return importDocxDocument(file.name, await file.arrayBuffer());
+  }
+  return importTextDocument(file.name, await file.text(), file.type);
 }

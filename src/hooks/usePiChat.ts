@@ -390,6 +390,7 @@ export function usePiChat(options?: UsePiChatOptions) {
   /* ---- delta throttle ---- */
   const deltaBufferRef = useRef<{ type: "text" | "thinking"; delta: string } | null>(null);
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAssistantIdRef = useRef<string | null>(null);
   const THROTTLE_MS = 32; // ~30 fps
 
   /* ---- models ---- */
@@ -581,16 +582,33 @@ export function usePiChat(options?: UsePiChatOptions) {
           // Open ONE assistant bubble for the entire agent turn. message_start
           // events from each LLM turn (inc. post-tool turns) all stream into
           // this single bubble so we never split thinking across N bubbles.
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              role: "assistant",
-              content: "",
-              timestamp: Date.now(),
-              isStreaming: true,
-            },
-          ]);
+          setMessages((prev) => {
+            const pendingId = pendingAssistantIdRef.current;
+            const last = prev[prev.length - 1];
+            if (
+              pendingId &&
+              last?.id === pendingId &&
+              last.role === "assistant" &&
+              last.isStreaming &&
+              !last.content &&
+              !last.thinking
+            ) {
+              pendingAssistantIdRef.current = null;
+              return prev;
+            }
+
+            pendingAssistantIdRef.current = null;
+            return [
+              ...prev,
+              {
+                id: `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                role: "assistant",
+                content: "",
+                timestamp: Date.now(),
+                isStreaming: true,
+              },
+            ];
+          });
           setIsStreaming(true);
           break;
         }
@@ -824,14 +842,25 @@ export function usePiChat(options?: UsePiChatOptions) {
         }
       }
 
+      const now = Date.now();
+      const pendingAssistantId = `asst-pending-${now}-${Math.random().toString(36).slice(2, 6)}`;
+      pendingAssistantIdRef.current = pendingAssistantId;
+      setIsStreaming(true);
       setMessages((prev) => [
         ...prev,
         {
-          id: `user-${Date.now()}`,
+          id: `user-${now}`,
           role: "user",
           content: text,
-          timestamp: Date.now(),
+          timestamp: now,
           attachments,
+        },
+        {
+          id: pendingAssistantId,
+          role: "assistant",
+          content: "",
+          timestamp: now,
+          isStreaming: true,
         },
       ]);
 
@@ -855,6 +884,7 @@ export function usePiChat(options?: UsePiChatOptions) {
           });
         }
       } catch (e: any) {
+        pendingAssistantIdRef.current = null;
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
@@ -881,9 +911,15 @@ export function usePiChat(options?: UsePiChatOptions) {
     if (ipc && sid) await ipc.invoke("pi:abort", { sessionId: sid });
   }, []);
 
-  const clear = useCallback(() => setMessages([]), []);
+  const clear = useCallback(() => {
+    pendingAssistantIdRef.current = null;
+    setIsStreaming(false);
+    setMessages([]);
+  }, []);
 
   const restoreMessages = useCallback((nextMessages: ChatMessage[]) => {
+    pendingAssistantIdRef.current = null;
+    setIsStreaming(false);
     setMessages(nextMessages.map((m) => ({ ...m, isStreaming: false })));
   }, []);
 
@@ -972,6 +1008,7 @@ export function usePiChat(options?: UsePiChatOptions) {
       sessionIdRef.current = snap.sessionId ?? result.sessionId;
       activeSessionRef.current = snap.sessionId ?? result.sessionId;
       setSessionId(snap.sessionId ?? result.sessionId);
+      pendingAssistantIdRef.current = null;
       setMessages([]);
       setIsStreaming(false);
       setSessionStats(null);
@@ -1130,6 +1167,7 @@ export function usePiChat(options?: UsePiChatOptions) {
       | null = null;
 
     if (disabled) {
+      pendingAssistantIdRef.current = null;
       sessionIdRef.current = null;
       activeSessionRef.current = null;
       setSessionId(null);
@@ -1244,6 +1282,7 @@ export function usePiChat(options?: UsePiChatOptions) {
 
         activeSessionRef.current = null;
         sessionIdRef.current = null;
+        pendingAssistantIdRef.current = null;
         setSessionId(null);
         setIsReady(false);
         setIsStreaming(false);
@@ -1310,6 +1349,7 @@ export function usePiChat(options?: UsePiChatOptions) {
         deltaTimerRef.current = null;
       }
       deltaBufferRef.current = null;
+      pendingAssistantIdRef.current = null;
 
       // Remove THIS run's listeners (and only these — sibling hook
       // instances have their own handlers registered separately).

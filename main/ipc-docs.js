@@ -6,6 +6,7 @@
 /*    - docs:get-working-dir                                          */
 /*    - docs:set-working-dir                                          */
 /*    - docs:pick-folder                                              */
+/*    - docs:pick-file                                                */
 /*    - docs:read                                                     */
 /*    - docs:write                                                    */
 /*    - docs:create                                                   */
@@ -18,6 +19,8 @@
 /*    - docs:open-in-os                                               */
 /*    - docs:make-folder                                              */
 /*    - docs:migrate                                                  */
+/*    - docs:read-layout                                              */
+/*    - docs:write-layout                                             */
 /* ------------------------------------------------------------------ */
 
 const { app, dialog, shell } = require('electron');
@@ -212,9 +215,38 @@ function register(ipcMain) {
   ipcMain.handle('docs:pick-folder', async (_event, { startPath } = {}) => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
+      title: 'Select Folder',
+      buttonLabel: 'Select Folder',
       defaultPath: startPath || defaultWorkingDir(),
     });
     return { path: result.canceled ? null : result.filePaths[0] || null };
+  });
+
+  ipcMain.handle('docs:pick-file', async (_event, { startPath } = {}) => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Open Document',
+      buttonLabel: 'Open',
+      defaultPath: startPath || defaultWorkingDir(),
+      filters: [
+        {
+          name: 'Documents',
+          extensions: ['docx', 'md', 'markdown', 'txt', 'rtf', 'html', 'htm', 'json'],
+        },
+        { name: 'Word (.docx)', extensions: ['docx'] },
+        { name: 'Markdown', extensions: ['md', 'markdown'] },
+        { name: 'Text', extensions: ['txt'] },
+        { name: 'Rich Text', extensions: ['rtf'] },
+        { name: 'HTML', extensions: ['html', 'htm'] },
+        { name: 'CentralHub Doc', extensions: ['json'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths[0]) {
+      return { path: null, parent: null };
+    }
+    const filePath = result.filePaths[0];
+    return { path: filePath, parent: path.dirname(filePath) };
   });
 
   ipcMain.handle('docs:browse', async (_event, { path: dirPath } = {}) => {
@@ -313,6 +345,33 @@ function register(ipcMain) {
     const dir = path.join(parent, safeName);
     await fs.mkdir(dir, { recursive: false });
     return { path: dir };
+  });
+
+  // Page-layout sidecar: stored next to each opened doc as
+  // <name>.layout.json so per-file page settings (orientation, margins,
+  // columns, font, spacing) persist across opens without modifying the
+  // .docx itself.
+  ipcMain.handle('docs:read-layout', async (_event, { path: docPath } = {}) => {
+    if (!docPath) return { layout: null };
+    const sidecar = `${docPath}.layout.json`;
+    try {
+      const raw = await fs.readFile(sidecar, 'utf8');
+      const parsed = JSON.parse(raw);
+      return { layout: parsed && typeof parsed === 'object' ? parsed : null };
+    } catch {
+      return { layout: null };
+    }
+  });
+
+  ipcMain.handle('docs:write-layout', async (_event, { path: docPath, layout } = {}) => {
+    if (!docPath || !layout || typeof layout !== 'object') {
+      return { ok: false };
+    }
+    const sidecar = `${docPath}.layout.json`;
+    await enqueue(sidecar, async () => {
+      await atomicWriteJson(sidecar, layout);
+    });
+    return { ok: true };
   });
 
   ipcMain.handle('docs:migrate', async (_event, { store, backups } = {}) => {
