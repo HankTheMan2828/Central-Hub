@@ -21,13 +21,13 @@ Bones are stable. Expect rough edges. Things to know up front:
 
 **AI Central.** Multi-tab chat against any model your OpenRouter key gives you. Five conversations stay alive at once without losing context. Powered by the Pi Coding Agent SDK running in-process. No remote relay. Your prompts go straight to OpenRouter.
 
+**Coding Agent.** An autonomous workspace for taking a project from prompt to working code, with a separate chat thread per workspace. Workbench or terminal mode.
+
 **Docs Area.** A clean writing surface with an AI panel docked beside it. Highlight, ask, edit, save. Word document import and export. No copy-pasting between apps.
 
 **The Web.** AI Search for headless research with summarized answers. (Reg Web, a plain browser pane, is coming.)
 
 **Typing Practice.** WPM tracking and keyboard training.
-
-**Coding Agent.** An autonomous workspace for taking a project from prompt to working code, with a separate chat thread per workspace. Workbench or terminal mode.
 
 ## Make it yours
 
