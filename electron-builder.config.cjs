@@ -42,6 +42,7 @@ module.exports = {
     "out/**/*",
     "build/**/*",
     "package.json",
+    "THIRD_PARTY_NOTICES.md",
     "node_modules/**/*",
   ],
   win: {

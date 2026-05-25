@@ -41,6 +41,8 @@ Pi is required. Without it, none of the AI features work, and there's no fallbac
 
 If you've used Pi as a CLI elsewhere, this is the same SDK, just embedded.
 
+Pi is built by Mario Zechner ([github.com/badlogic/pi-mono](https://github.com/badlogic/pi-mono), MIT). Central Hub would not exist without it.
+
 ## Why it's different
 
 Most "AI desktop apps" are a chat window wrapped in Electron. Central Hub treats AI as a native feature across every module, all powered by the same local Pi session.
