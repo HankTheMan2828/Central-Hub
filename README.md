@@ -31,11 +31,19 @@ Bones are stable. Expect rough edges. Things to know up front:
 
 ## Make it yours
 
-Nine themes, dark and light. Midnight (pure black with orange accent) on one end, Sunlit Canvas (warm light paper) on the other. Panels float as rounded bubbles in the middle of the screen. Switch themes from the Themes menu in seconds.
+Nine themes, dark and light. Midnight (pure black with orange accent) on one end, Sunlit Canvas (warm light paper) on the other.
+
+## Built on Pi
+
+Every AI feature in Central Hub runs through the Pi Coding Agent SDK, bundled inside the app. You don't install, configure, or launch Pi separately. Chat, the Coding Agent, AI Search summaries, and the Docs Area AI panel all route through the same in-process Pi session.
+
+Pi is required. Without it, none of the AI features work, and there's no fallback. The upside is that it lives inside Electron's main process instead of bouncing through a remote service, so tool calls and prompts happen at local speeds and your conversations stay under your control.
+
+If you've used Pi as a CLI elsewhere, this is the same SDK, just embedded.
 
 ## Why it's different
 
-Most "AI desktop apps" are a chat window wrapped in Electron. Central Hub treats AI as a native feature across every module. The Pi SDK runs in-process, so prompts and tool calls happen at local speeds and your model stays under your control.
+Most "AI desktop apps" are a chat window wrapped in Electron. Central Hub treats AI as a native feature across every module, all powered by the same local Pi session.
 
 It auto-updates. It survives its own edits via a hot-edit safety system that creates git checkpoints before critical files get modified.
 
