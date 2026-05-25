@@ -14,7 +14,7 @@ Bones are stable. Expect rough edges. Things to know up front:
 
 - **You need an OpenRouter API key** for the AI chat and coding agent to work. Configure it under **Menu → Settings → AI Provider**. Without it, the chat panels will sit there looking lonely.
 - **Reg Web** (under "The Web" tab) is a placeholder. The framework is in, the browser isn't wired yet.
-- **Windows only for now.** macOS and Linux builds don't exist.
+- **Windows only for now.** macOS and Linux builds are underway.
 - **No telemetry.** Nothing leaves your machine except your direct prompts to OpenRouter and (optionally) your searches to Brave, using your own keys.
 
 ## What's inside
