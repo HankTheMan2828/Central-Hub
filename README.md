@@ -31,7 +31,7 @@ Bones are stable. Expect rough edges. Things to know up front:
 
 ## Make it yours
 
-Nine themes, dark and light. Midnight (pure black with orange accent) on one end, Sunlit Canvas (warm light paper) on the other. Two layout modes: **Foundations** for tight column-based minimalism, or **Clouds** if you want your panels to float as rounded bubbles. Switch from the Themes menu in seconds.
+Nine themes, dark and light. Midnight (pure black with orange accent) on one end, Sunlit Canvas (warm light paper) on the other. Panels float as rounded bubbles in the middle of the screen. Switch themes from the Themes menu in seconds.
 
 ## Why it's different
 
