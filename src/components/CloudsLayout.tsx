@@ -98,13 +98,17 @@ export function CloudsLayout({
         mainSize === "tall" ? "clouds-shell-main-tall" : ""
       } fixed inset-0 bg-[var(--ch-bg-page)] text-[var(--ch-text)] no-drag overflow-hidden`}
     >
+      <div
+        aria-hidden
+        className="drag-region absolute top-0 left-0 right-0 h-8 z-[60] bg-[var(--ch-bg-page)] border-b border-[var(--ch-border-faint)]"
+      />
       <div aria-hidden className="clouds-chrome-shadow-layer absolute inset-0 z-10 pointer-events-none">
-        <div className="absolute top-5 left-5 flex items-center gap-3">
+        <div className="absolute top-10 left-5 flex items-center gap-3">
           <div className="clouds-menu-button-cast clouds-chrome-cast h-11 min-w-[112px] rounded-2xl" />
           <div className="clouds-settings-button-cast clouds-chrome-cast h-11 w-11 rounded-full" />
         </div>
         <div
-          className={`clouds-menu-bubble-cast clouds-chrome-cast absolute left-5 top-[76px] w-[286px] max-w-[86vw] rounded-[2rem] transition-[opacity,transform,height] duration-200 ease-out ${
+          className={`clouds-menu-bubble-cast clouds-chrome-cast absolute left-5 top-[96px] w-[286px] max-w-[86vw] rounded-[2rem] transition-[opacity,transform,height] duration-200 ease-out ${
             navOpen
               ? "opacity-100 scale-100"
               : "opacity-0 scale-95"
@@ -113,7 +117,7 @@ export function CloudsLayout({
         />
       </div>
 
-      <div className="absolute top-5 left-5 z-50 flex items-center gap-3">
+      <div className="absolute top-10 left-5 z-50 flex items-center gap-3">
         <button
           type="button"
           onClick={() => setNavOpen((open) => !open)}
@@ -142,7 +146,7 @@ export function CloudsLayout({
       )}
       <aside
         ref={menuBubbleRef}
-        className={`clouds-menu-bubble absolute left-5 top-[76px] z-50 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
+        className={`clouds-menu-bubble absolute left-5 top-[96px] z-50 w-[286px] max-w-[86vw] rounded-[2rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] p-3 overflow-hidden transition-[opacity,transform,max-height] duration-200 ease-out ${
           navOpen
             ? "max-h-[420px] opacity-100 scale-100 pointer-events-auto"
             : "max-h-0 opacity-0 scale-95 pointer-events-none"

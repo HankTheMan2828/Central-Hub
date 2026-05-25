@@ -195,6 +195,9 @@ export const HIGHLIGHT_COLORS: { label: string; value: string }[] = [
   { label: "Grey", value: "#e5e7eb" },
 ];
 
+// Curated list covering fonts that ship with Windows and macOS by default,
+// plus the generic CSS families. The `id` is what we persist in WordDoc /
+// layout sidecars; `stack` is the actual CSS font-family string.
 export const FONT_FAMILIES: FontFamily[] = [
   {
     id: "sans",
@@ -211,21 +214,40 @@ export const FONT_FAMILIES: FontFamily[] = [
     label: "Monospace",
     stack: '"JetBrains Mono", Consolas, monospace',
   },
-  {
-    id: "calibri",
-    label: "Calibri",
-    stack: 'Calibri, "Segoe UI", system-ui, sans-serif',
-  },
-  {
-    id: "cambria",
-    label: "Cambria",
-    stack: "Cambria, Georgia, serif",
-  },
-  {
-    id: "courier",
-    label: "Courier",
-    stack: '"Courier New", Courier, monospace',
-  },
+  { id: "arial", label: "Arial", stack: 'Arial, Helvetica, sans-serif' },
+  { id: "arial-black", label: "Arial Black", stack: '"Arial Black", Gadget, sans-serif' },
+  { id: "arial-narrow", label: "Arial Narrow", stack: '"Arial Narrow", Arial, sans-serif' },
+  { id: "bahnschrift", label: "Bahnschrift", stack: 'Bahnschrift, "DIN Alternate", sans-serif' },
+  { id: "book-antiqua", label: "Book Antiqua", stack: '"Book Antiqua", Palatino, serif' },
+  { id: "bookman", label: "Bookman Old Style", stack: '"Bookman Old Style", Bookman, serif' },
+  { id: "calibri", label: "Calibri", stack: 'Calibri, "Segoe UI", system-ui, sans-serif' },
+  { id: "cambria", label: "Cambria", stack: "Cambria, Georgia, serif" },
+  { id: "candara", label: "Candara", stack: 'Candara, Calibri, sans-serif' },
+  { id: "century", label: "Century", stack: 'Century, "Century Schoolbook", serif' },
+  { id: "century-gothic", label: "Century Gothic", stack: '"Century Gothic", AppleGothic, sans-serif' },
+  { id: "comic-sans", label: "Comic Sans MS", stack: '"Comic Sans MS", "Comic Sans", cursive' },
+  { id: "consolas", label: "Consolas", stack: 'Consolas, "Lucida Console", monospace' },
+  { id: "constantia", label: "Constantia", stack: 'Constantia, Georgia, serif' },
+  { id: "corbel", label: "Corbel", stack: 'Corbel, "Lucida Sans", sans-serif' },
+  { id: "courier", label: "Courier New", stack: '"Courier New", Courier, monospace' },
+  { id: "ebrima", label: "Ebrima", stack: 'Ebrima, "Segoe UI", sans-serif' },
+  { id: "franklin-gothic", label: "Franklin Gothic", stack: '"Franklin Gothic Medium", "Franklin Gothic", "Arial Narrow", sans-serif' },
+  { id: "garamond", label: "Garamond", stack: 'Garamond, "EB Garamond", serif' },
+  { id: "georgia", label: "Georgia", stack: 'Georgia, "Times New Roman", serif' },
+  { id: "helvetica", label: "Helvetica", stack: 'Helvetica, Arial, sans-serif' },
+  { id: "impact", label: "Impact", stack: 'Impact, Charcoal, sans-serif' },
+  { id: "lucida-console", label: "Lucida Console", stack: '"Lucida Console", Monaco, monospace' },
+  { id: "lucida-sans", label: "Lucida Sans", stack: '"Lucida Sans Unicode", "Lucida Sans", sans-serif' },
+  { id: "palatino", label: "Palatino", stack: '"Palatino Linotype", "Book Antiqua", Palatino, serif' },
+  { id: "rockwell", label: "Rockwell", stack: 'Rockwell, "Courier Bold", serif' },
+  { id: "segoe-print", label: "Segoe Print", stack: '"Segoe Print", "Segoe UI", cursive' },
+  { id: "segoe-script", label: "Segoe Script", stack: '"Segoe Script", "Segoe UI", cursive' },
+  { id: "segoe-ui", label: "Segoe UI", stack: '"Segoe UI", Tahoma, Geneva, sans-serif' },
+  { id: "sitka", label: "Sitka", stack: 'Sitka, "Sitka Text", Georgia, serif' },
+  { id: "tahoma", label: "Tahoma", stack: 'Tahoma, Geneva, Verdana, sans-serif' },
+  { id: "times-new-roman", label: "Times New Roman", stack: '"Times New Roman", Times, serif' },
+  { id: "trebuchet", label: "Trebuchet MS", stack: '"Trebuchet MS", "Lucida Grande", sans-serif' },
+  { id: "verdana", label: "Verdana", stack: 'Verdana, Geneva, sans-serif' },
 ];
 
 export const FONT_SIZES_PT = [

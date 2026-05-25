@@ -60,24 +60,60 @@ function applyDocxParagraphFormatting(
     current = walker.nextNode();
   }
 
-  const count = Math.min(blocks.length, paragraphs.length);
-  for (let i = 0; i < count; i++) {
-    const el = blocks[i];
-    const props = paragraphs[i];
+  // Match HTML blocks to XML paragraphs by text content with a forward-
+  // scanning cursor. This survives mammoth dropping leading empty/spacer
+  // paragraphs (or wrapping body content under <w:sdt>), which would
+  // otherwise shift a strict index zip and leave the first 1-2 paragraphs
+  // un-styled.
+  const normalizeText = (s: string) =>
+    s
+      .normalize("NFKC")
+      .replace(/[‘’‚‛]/g, "'")
+      .replace(/[“”„‟]/g, '"')
+      .replace(/[–—―]/g, "-")
+      .replace(/[­]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const xmlTexts = paragraphs.map((p) => normalizeText(p.text || ""));
+  const used = new Array<boolean>(paragraphs.length).fill(false);
+  let cursor = 0;
+  const applyTo = (el: HTMLElement, props: ParagraphProps) => {
     const paraStyle = paragraphStyleString(props);
     const runStyle = dominantRunStyleString(props);
     const combined = mergeStyleString(paraStyle, runStyle);
-    if (combined) {
-      el.setAttribute(
-        "style",
-        mergeStyleString(el.getAttribute("style") || "", combined)
-      );
+    if (!combined) return;
+    el.setAttribute(
+      "style",
+      mergeStyleString(el.getAttribute("style") || "", combined)
+    );
+  };
+  for (const block of blocks) {
+    const htmlText = normalizeText(block.textContent || "");
+    let matched = -1;
+    if (htmlText.length > 0) {
+      // Scan forward from the cursor — first equal text wins. Bound the
+      // scan to avoid pathological cases when text is highly repetitive.
+      const scanEnd = Math.min(paragraphs.length, cursor + 64);
+      for (let j = cursor; j < scanEnd; j++) {
+        if (!used[j] && xmlTexts[j] === htmlText) {
+          matched = j;
+          break;
+        }
+      }
     }
+    // Fallback: if no text match, fall back to the cursor position so
+    // empty paragraphs (no text on either side) still pair up positionally.
+    if (matched < 0 && cursor < paragraphs.length && !used[cursor]) {
+      matched = cursor;
+    }
+    if (matched < 0) continue;
+    used[matched] = true;
+    cursor = matched + 1;
+    applyTo(block, paragraphs[matched]);
   }
 
-  // Convert any literal tab characters in text nodes to a styled inline span
-  // so they render as visible whitespace at a default tab stop rather than
-  // collapsing into a single space.
+  // Convert literal tab characters in text nodes to a run of non-breaking
+  // spaces so they survive HTML whitespace collapsing.
   const textWalker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const tabHosts: Text[] = [];
   let textNode = textWalker.nextNode();
@@ -88,7 +124,19 @@ function applyDocxParagraphFormatting(
     textNode = textWalker.nextNode();
   }
   tabHosts.forEach((node) => {
+    // Plain non-breaking spaces — the previous inline-block <span> per tab
+    // was atomic inside contenteditable and broke cursor placement near
+    // tabs. 6 nbsp ≈ Word's default half-inch tab stop at 11pt.
     const value = node.nodeValue || "";
+    node.nodeValue = value.replace(/\t/g, "      ");
+  });
+  return root.innerHTML;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _unusedTabPathStub(_value: string): string { return _value; }
+const _DEAD_TAB_PATH_REMOVED = `
+  /*
     const parts = value.split("\t");
     const fragment = doc.createDocumentFragment();
     parts.forEach((part, index) => {
@@ -107,8 +155,12 @@ function applyDocxParagraphFormatting(
     node.parentNode?.replaceChild(fragment, node);
   });
 
-  return root.innerHTML;
-}
+  return "";
+  */
+  return _value;
+`;
+void _DEAD_TAB_PATH_REMOVED;
+void _unusedTabPathStub;
 
 export type ImportResult = {
   title: string;

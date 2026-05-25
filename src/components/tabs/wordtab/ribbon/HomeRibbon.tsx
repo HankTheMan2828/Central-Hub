@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   Bold,
   Italic,
@@ -42,8 +43,122 @@ import {
   LINE_SPACING_PRESETS,
   PARAGRAPH_SPACING_PRESETS,
   STYLE_PRESETS,
+  type FontFamily,
   type StylePreset,
 } from "../pageOptions";
+
+const FONT_RECENTS_KEY = "wordtab-font-recents";
+const FONT_RECENTS_MAX = 5;
+
+function loadFontRecents(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(FONT_RECENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+
+function saveFontRecents(ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(FONT_RECENTS_KEY, JSON.stringify(ids));
+  } catch {
+    /* localStorage full / disabled — non-fatal */
+  }
+}
+
+type FontPickerBodyProps = {
+  fonts: FontFamily[];
+  selectedId: string;
+  recents: string[];
+  onPick: (id: string) => void;
+};
+
+function FontPickerBody({
+  fonts,
+  selectedId,
+  recents,
+  onPick,
+}: FontPickerBodyProps) {
+  const [query, setQuery] = useState("");
+  const fontsById = useMemo(() => {
+    const map = new Map<string, FontFamily>();
+    fonts.forEach((f) => map.set(f.id, f));
+    return map;
+  }, [fonts]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return fonts;
+    return fonts.filter((f) => f.label.toLowerCase().includes(q));
+  }, [fonts, query]);
+
+  const recentEntries = useMemo(() => {
+    if (query.trim()) return [];
+    return recents
+      .map((id) => fontsById.get(id))
+      .filter((f): f is FontFamily => Boolean(f));
+  }, [fontsById, query, recents]);
+
+  const renderRow = (font: FontFamily) => (
+    <button
+      key={font.id}
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onPick(font.id)}
+      className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left font-mono transition-colors ${
+        font.id === selectedId
+          ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+          : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
+      }`}
+    >
+      <span className="text-[11px] truncate" style={{ fontFamily: font.stack }}>
+        {font.label}
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col max-h-[320px] min-w-[220px]">
+      <div className="p-2 border-b border-[var(--ch-border-subtle)] shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--ch-text-faint)]" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search fonts..."
+            className="w-full bg-[var(--ch-bg-page)] border border-[var(--ch-border-subtle)] rounded-sm pl-7 pr-2 py-1 text-[11px] font-mono text-[var(--ch-text)] placeholder:text-[var(--ch-text-faint)] focus:outline-none focus:border-[#FFB347]/50"
+            autoFocus
+          />
+        </div>
+      </div>
+      <div className="overflow-y-auto flex-1 min-h-0">
+        {recentEntries.length > 0 && (
+          <>
+            <div className="px-3 pt-2 pb-1 text-[9px] uppercase tracking-widest font-mono text-[var(--ch-text-faint)]">
+              Recent
+            </div>
+            {recentEntries.map(renderRow)}
+            <div className="my-1 border-t border-[var(--ch-border-subtle)]" />
+          </>
+        )}
+        {filtered.length === 0 ? (
+          <div className="px-3 py-3 text-[11px] font-mono text-[var(--ch-text-faint)] italic">
+            No fonts match
+          </div>
+        ) : (
+          filtered.map(renderRow)
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Props = {
   exec: (cmd: string, value?: string) => void;
@@ -107,37 +222,38 @@ export function HomeRibbon({
   const fontFamily =
     FONT_FAMILIES.find((font) => font.id === fontFamilyId) ?? FONT_FAMILIES[0];
 
+  const [fontRecents, setFontRecents] = useState<string[]>([]);
+  useEffect(() => {
+    setFontRecents(loadFontRecents());
+  }, []);
+  const handleFontPick = (close: () => void) => (id: string) => {
+    close();
+    onFontFamilyChange(id);
+    setFontRecents((prev) => {
+      const next = [id, ...prev.filter((x) => x !== id)].slice(
+        0,
+        FONT_RECENTS_MAX
+      );
+      saveFontRecents(next);
+      return next;
+    });
+  };
+
   return (
     <>
       <DropdownButton
         title="Font family"
         icon={<Type className="w-3 h-3" />}
         label={fontFamily.label}
-        panelClass="min-w-[190px]"
+        panelClass="min-w-[220px] p-0"
       >
         {(close) => (
-          <>
-            {FONT_FAMILIES.map((font) => (
-              <button
-                key={font.id}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  close();
-                  onFontFamilyChange(font.id);
-                }}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left font-mono transition-colors ${
-                  font.id === fontFamily.id
-                    ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                    : "text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)]"
-                }`}
-              >
-                <span className="text-[11px] truncate" style={{ fontFamily: font.stack }}>
-                  {font.label}
-                </span>
-              </button>
-            ))}
-          </>
+          <FontPickerBody
+            fonts={FONT_FAMILIES}
+            selectedId={fontFamily.id}
+            recents={fontRecents}
+            onPick={handleFontPick(close)}
+          />
         )}
       </DropdownButton>
 

@@ -9,6 +9,7 @@ import {
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Archive,
@@ -221,6 +222,7 @@ function ComposerDropdown({
   disabled,
   searchable,
   searchPlaceholder,
+  compact = false,
   onOpenChange,
   onSelect,
 }: {
@@ -232,6 +234,7 @@ function ComposerDropdown({
   disabled?: boolean;
   searchable?: boolean;
   searchPlaceholder?: string;
+  compact?: boolean;
   onOpenChange: (id: ComposerDropdownId | null) => void;
   onSelect: (value: string) => void | Promise<void>;
 }) {
@@ -272,18 +275,38 @@ function ComposerDropdown({
   }, [isOpen, onOpenChange]);
 
   return (
-    <div ref={dropdownRef} className="relative flex flex-col gap-1 min-w-0">
-      <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
-        {label}
-      </span>
+    <div
+      ref={dropdownRef}
+      className={
+        compact
+          ? "relative"
+          : "relative flex flex-col gap-1 min-w-0"
+      }
+    >
+      {!compact && (
+        <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)]">
+          {label}
+        </span>
+      )}
       <button
         type="button"
         disabled={disabled}
         onClick={() => handleOpenChange(isOpen ? null : id)}
-        className="clouds-coding-dropdown-button h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-1.5"
-        title={valueLabel}
+        className={
+          compact
+            ? "clouds-coding-dropdown-button h-[26px] px-2.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] hover:border-[var(--agent-border)] rounded-full text-[11px] outline-none focus:border-[var(--agent-border)] disabled:opacity-45 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+            : "clouds-coding-dropdown-button h-[30px] min-w-0 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm px-2 text-[11px] outline-none focus:border-[var(--agent-border)] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-1.5"
+        }
+        title={compact ? `${label}: ${valueLabel}` : valueLabel}
       >
-        <span className="truncate">{valueLabel}</span>
+        {compact && (
+          <span className="text-[9px] uppercase tracking-[0.14em] text-[var(--ch-text-faint)] shrink-0">
+            {label}
+          </span>
+        )}
+        <span className={compact ? "truncate max-w-[140px]" : "truncate"}>
+          {valueLabel}
+        </span>
         <ChevronDown
           className={`w-3 h-3 shrink-0 opacity-55 transition-transform ${
             isOpen ? "rotate-180" : ""
@@ -1554,21 +1577,30 @@ function CodingAgentTabPanel({
             <div ref={scrollAnchorRef} />
           </div>
 
-          <form
+          <motion.form
+            layout
+            transition={{ type: "spring", stiffness: 240, damping: 30 }}
             onSubmit={handleSubmit}
-            className={`clouds-coding-composer absolute border border-[var(--agent-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl p-3 flex flex-col gap-2 transition-[top,bottom,left,right,width,transform] duration-500 ease-out ${
+            className={`clouds-coding-composer absolute border border-[var(--agent-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl p-3 flex flex-col gap-2 ${
               composerIsFloating
                 ? "top-1/2 bottom-auto left-1/2 right-auto w-[56%] -translate-x-1/2 -translate-y-1/2"
                 : "top-auto bottom-3 left-3 right-3 w-auto translate-x-0 translate-y-0"
             }`}
           >
-            <div className="grid grid-cols-4 gap-2">
+            <div
+              className={
+                composerIsFloating
+                  ? "grid grid-cols-4 gap-2"
+                  : "flex flex-wrap items-center gap-1.5"
+              }
+            >
               <ComposerDropdown
                 id="workspace"
                 label="Workspace"
                 valueLabel={selectedWorkspace.name}
                 options={workspaceDropdownOptions}
                 openId={openComposerMenu}
+                compact={!composerIsFloating}
                 onOpenChange={setOpenComposerMenu}
                 onSelect={handleWorkspaceChange}
               />
@@ -1588,6 +1620,7 @@ function CodingAgentTabPanel({
                 disabled={!chat.isReady || thinkingModels.length === 0}
                 searchable
                 searchPlaceholder="Search models..."
+                compact={!composerIsFloating}
                 onOpenChange={setOpenComposerMenu}
                 onSelect={handleModelChange}
               />
@@ -1599,6 +1632,7 @@ function CodingAgentTabPanel({
                 options={effortDropdownOptions}
                 openId={openComposerMenu}
                 disabled={!selectedThinkingModel}
+                compact={!composerIsFloating}
                 onOpenChange={setOpenComposerMenu}
                 onSelect={(value) => setEffort(value as EffortLevel)}
               />
@@ -1609,6 +1643,7 @@ function CodingAgentTabPanel({
                 valueLabel={selectedSafety.label}
                 options={safetyDropdownOptions}
                 openId={openComposerMenu}
+                compact={!composerIsFloating}
                 onOpenChange={setOpenComposerMenu}
                 onSelect={(value) => setSafetyLevel(value as SafetyLevel)}
               />
@@ -1686,7 +1721,7 @@ function CodingAgentTabPanel({
                 </button>
               )}
             </div>
-          </form>
+          </motion.form>
         </div>
       </div>
 

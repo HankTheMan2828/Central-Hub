@@ -54,7 +54,10 @@ export function RibbonTabs({ active, onChange, zoom, onZoomChange }: Props) {
           {tab.label}
         </button>
       ))}
-      <div className="ml-auto flex h-7 items-center gap-1.5 -mb-px shrink-0">
+      <div
+        className="ml-auto flex h-7 items-center gap-1.5 -mb-px shrink-0"
+        style={{ transform: "translateY(-3px)" }}
+      >
         <button
           type="button"
           title="Zoom out"

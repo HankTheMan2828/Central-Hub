@@ -51,6 +51,10 @@ export type ParagraphProps = {
   // lineHeight is either a numeric ratio (1.0, 1.5, etc.) or a px value.
   lineHeightRatio?: number;
   lineHeightPx?: number;
+  // Normalized plain text of the paragraph — used to align with mammoth's
+  // HTML output when index-based zipping drifts (e.g. mammoth dropping a
+  // leading empty paragraph that's still present in document.xml).
+  text: string;
   runs: RunProps[];
 };
 
@@ -242,6 +246,11 @@ async function loadStyleDefaults(
     result.documentDefaults = extractParagraphPropsRaw(pPr);
   }
 
+  // First pass: collect direct properties + the basedOn link per style.
+  const rawById = new Map<
+    string,
+    { direct: Partial<ParagraphProps>; basedOn?: string }
+  >();
   const styles = root.getElementsByTagNameNS(WORD_NS, "style");
   for (let i = 0; i < styles.length; i++) {
     const style = styles[i];
@@ -250,11 +259,37 @@ async function loadStyleDefaults(
     const id = attr(style, "styleId");
     if (!id) continue;
     const pPr = getChildByLocalName(style, "pPr");
-    const props = extractParagraphPropsRaw(pPr);
+    const direct = extractParagraphPropsRaw(pPr);
+    const basedOnEl = getChildByLocalName(style, "basedOn");
+    const basedOn = attr(basedOnEl, "val") || undefined;
+    rawById.set(id, { direct, basedOn });
+  }
+
+  // Second pass: resolve the basedOn chain so a style inherits properties
+  // from its parents (e.g. "Heading1" basedOn "Normal" basedOn defaults).
+  // Walk up from each style, memoizing.
+  const resolved = new Map<string, Partial<ParagraphProps>>();
+  const resolve = (id: string, seen: Set<string>): Partial<ParagraphProps> => {
+    const cached = resolved.get(id);
+    if (cached) return cached;
+    if (seen.has(id)) return {};
+    seen.add(id);
+    const raw = rawById.get(id);
+    if (!raw) {
+      resolved.set(id, {});
+      return {};
+    }
+    const parentProps = raw.basedOn ? resolve(raw.basedOn, seen) : {};
+    const merged = mergeProps(parentProps, raw.direct);
+    resolved.set(id, merged);
+    return merged;
+  };
+  rawById.forEach((_, id) => {
+    const props = resolve(id, new Set());
     if (Object.keys(props).length > 0) {
       result.byStyleId.set(id, props);
     }
-  }
+  });
   return result;
 }
 
@@ -278,51 +313,99 @@ export async function extractDocxProperties(
     dom.documentElement;
 
   const out: ParagraphProps[] = [];
-  // Iterate ONLY top-level <w:p> children of the body in order. Nested
-  // paragraphs inside text-boxes etc. are skipped — mammoth doesn't surface
-  // those as siblings either.
-  for (let i = 0; i < body.childNodes.length; i++) {
-    const node = body.childNodes[i];
-    if (node.nodeType !== 1) continue;
-    const el = node as Element;
-    if (el.localName !== "p") continue;
-
-    const pPr = getChildByLocalName(el, "pPr");
-    const direct = extractParagraphPropsRaw(pPr);
-    const inherited = direct.styleId
-      ? styleDefaults.byStyleId.get(direct.styleId) ?? {}
-      : {};
-    const merged = mergeProps(
-      mergeProps(styleDefaults.documentDefaults, inherited),
-      direct
-    );
-
-    const runs: RunProps[] = [];
-    for (let j = 0; j < el.childNodes.length; j++) {
-      const child = el.childNodes[j];
-      if (child.nodeType !== 1) continue;
-      const childEl = child as Element;
-      if (childEl.localName === "r") {
-        runs.push(extractRunProps(childEl));
+  // Walk paragraphs that sit in the body's normal flow, including ones
+  // wrapped in <w:sdt><w:sdtContent>. Skip into <w:tbl> — table cell
+  // paragraphs aren't part of mammoth's top-level block stream (mammoth
+  // emits them inside <td>) so they shouldn't be in this list either.
+  const walkBody = (parent: Element) => {
+    for (let i = 0; i < parent.childNodes.length; i++) {
+      const node = parent.childNodes[i];
+      if (node.nodeType !== 1) continue;
+      const el = node as Element;
+      const name = el.localName;
+      if (name === "p") {
+        out.push(extractParagraph(el, styleDefaults));
+      } else if (name === "sdt") {
+        const content = getChildByLocalName(el, "sdtContent");
+        if (content) walkBody(content);
+      } else if (name === "sdtContent") {
+        walkBody(el);
       }
+      // <w:tbl> and everything else: skipped on purpose.
     }
-
-    out.push({
-      styleId: merged.styleId,
-      alignment: merged.alignment,
-      indentLeftTwips: merged.indentLeftTwips,
-      indentRightTwips: merged.indentRightTwips,
-      indentFirstLineTwips: merged.indentFirstLineTwips,
-      indentHangingTwips: merged.indentHangingTwips,
-      spacingBeforeTwips: merged.spacingBeforeTwips,
-      spacingAfterTwips: merged.spacingAfterTwips,
-      lineHeightRatio: merged.lineHeightRatio,
-      lineHeightPx: merged.lineHeightPx,
-      runs,
-    });
-  }
+  };
+  walkBody(body);
 
   return { paragraphs: out };
+}
+
+function paragraphText(el: Element): string {
+  // Recursive run/text walk so we pick up text inside <w:r>, including
+  // text wrapped in extra inline elements. Tabs become literal \t which
+  // we collapse to a single space for matching purposes.
+  let buf = "";
+  const visit = (node: Node) => {
+    if (node.nodeType === 1) {
+      const childEl = node as Element;
+      if (childEl.localName === "t" || childEl.localName === "delText") {
+        buf += childEl.textContent ?? "";
+        return;
+      }
+      if (childEl.localName === "tab") {
+        buf += " ";
+        return;
+      }
+      if (childEl.localName === "br") {
+        buf += " ";
+        return;
+      }
+      for (let i = 0; i < childEl.childNodes.length; i++) {
+        visit(childEl.childNodes[i]);
+      }
+    }
+  };
+  visit(el);
+  return buf.replace(/\s+/g, " ").trim();
+}
+
+function extractParagraph(
+  el: Element,
+  styleDefaults: StyleDefaults
+): ParagraphProps {
+  const pPr = getChildByLocalName(el, "pPr");
+  const direct = extractParagraphPropsRaw(pPr);
+  const inherited = direct.styleId
+    ? styleDefaults.byStyleId.get(direct.styleId) ?? {}
+    : {};
+  const merged = mergeProps(
+    mergeProps(styleDefaults.documentDefaults, inherited),
+    direct
+  );
+
+  const runs: RunProps[] = [];
+  for (let j = 0; j < el.childNodes.length; j++) {
+    const child = el.childNodes[j];
+    if (child.nodeType !== 1) continue;
+    const childEl = child as Element;
+    if (childEl.localName === "r") {
+      runs.push(extractRunProps(childEl));
+    }
+  }
+
+  return {
+    styleId: merged.styleId,
+    alignment: merged.alignment,
+    indentLeftTwips: merged.indentLeftTwips,
+    indentRightTwips: merged.indentRightTwips,
+    indentFirstLineTwips: merged.indentFirstLineTwips,
+    indentHangingTwips: merged.indentHangingTwips,
+    spacingBeforeTwips: merged.spacingBeforeTwips,
+    spacingAfterTwips: merged.spacingAfterTwips,
+    lineHeightRatio: merged.lineHeightRatio,
+    lineHeightPx: merged.lineHeightPx,
+    text: paragraphText(el),
+    runs,
+  };
 }
 
 // Build the inline style string for a paragraph's properties. Returns ""

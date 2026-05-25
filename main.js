@@ -55,7 +55,7 @@ function createWindow() {
     titleBarOverlay: {
       color: '#1a1a1a',
       symbolColor: '#FFFFFF',
-      height: 8
+      height: 32
     },
     icon: appIcon
   });

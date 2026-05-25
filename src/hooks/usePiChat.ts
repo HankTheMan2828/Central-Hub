@@ -582,22 +582,24 @@ export function usePiChat(options?: UsePiChatOptions) {
           // Open ONE assistant bubble for the entire agent turn. message_start
           // events from each LLM turn (inc. post-tool turns) all stream into
           // this single bubble so we never split thinking across N bubbles.
+          //
+          // If send() already queued a placeholder bubble (pendingAssistantIdRef
+          // is set synchronously, before any await), trust the ref and skip —
+          // the placeholder may not have committed to messages state yet when
+          // this event fires, so a `prev`-based identity check would race.
+          if (pendingAssistantIdRef.current) {
+            pendingAssistantIdRef.current = null;
+            setIsStreaming(true);
+            break;
+          }
+
+          // No pending placeholder (e.g., resumed session, external trigger).
+          // Avoid a duplicate if a streaming assistant bubble is already open.
           setMessages((prev) => {
-            const pendingId = pendingAssistantIdRef.current;
             const last = prev[prev.length - 1];
-            if (
-              pendingId &&
-              last?.id === pendingId &&
-              last.role === "assistant" &&
-              last.isStreaming &&
-              !last.content &&
-              !last.thinking
-            ) {
-              pendingAssistantIdRef.current = null;
+            if (last?.role === "assistant" && last.isStreaming) {
               return prev;
             }
-
-            pendingAssistantIdRef.current = null;
             return [
               ...prev,
               {

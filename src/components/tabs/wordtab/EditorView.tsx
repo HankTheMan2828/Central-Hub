@@ -845,8 +845,15 @@ export const EditorView = forwardRef(function EditorView(
       const node = localEditorRef.current;
       if (!node) return;
       if (effectivePageFlow === "vertical") {
+        // editorRect / e.clientY are in viewport CSS pixels which already
+        // include CSS `zoom`. pagePeriodPx / writingAreaHeightPx are layout
+        // values computed without zoom. Scale the screen-space pointer offset
+        // back into layout space before the gap check, otherwise non-100%
+        // zoom levels produce a recurring 36-px band where legitimate clicks
+        // land in the "gap" by accident and get redirected to the doc end.
+        const zoomScale = zoom / 100 || 1;
         const editorRect = node.getBoundingClientRect();
-        const pointerY = e.clientY - editorRect.top;
+        const pointerY = (e.clientY - editorRect.top) / zoomScale;
         const pointerInPage = positiveModulo(pointerY, pagePeriodPx);
         if (pointerInPage > writingAreaHeightPx) {
           e.preventDefault();
@@ -882,6 +889,7 @@ export const EditorView = forwardRef(function EditorView(
       placeCaretAtEnd,
       placeCaretAtStart,
       writingAreaHeightPx,
+      zoom,
     ]
   );
 

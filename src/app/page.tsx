@@ -27,6 +27,7 @@ import {
   LeftNav,
   type ChatSubTabId,
   type TabId,
+  type WebSubTabId,
   type WordSubTabId,
 } from "@/components/LeftNav";
 import {
@@ -112,6 +113,7 @@ export default function Home() {
   const [activeNavTab, setActiveNavTab] = useState<TabId>("chat");
   const [chatSubTab, setChatSubTab] = useState<ChatSubTabId>("plain");
   const [wordSubTab, setWordSubTab] = useState<WordSubTabId>("saves");
+  const [webSubTab, setWebSubTab] = useState<WebSubTabId>("ai");
 
   // We need a shared chat reference for the settings panel (model selector, API keys)
   // The first tab's chat instance serves as the "global" reference for settings.
@@ -295,6 +297,8 @@ export default function Home() {
       onChatSubSelect={setChatSubTab}
       wordSubTab={wordSubTab}
       onWordSubSelect={setWordSubTab}
+      webSubTab={webSubTab}
+      onWebSubSelect={setWebSubTab}
       showWordSubTabs={false}
     />
   );
@@ -656,6 +660,10 @@ export default function Home() {
       <div className="h-full min-h-0 box-border flex flex-col p-3">
         <TypingTab />
       </div>
+    ) : activeNavTab === "search" && webSubTab === "reg" ? (
+      <div className="h-full min-h-0 box-border flex items-center justify-center p-3 text-[11px] uppercase tracking-[0.2em] opacity-30">
+        Reg Web — coming soon
+      </div>
     ) : activeNavTab === "search" ? undefined : (
       <div className="h-full min-h-0 box-border flex flex-col p-3">
         <SnippetsTab />
@@ -663,7 +671,7 @@ export default function Home() {
     );
 
   const cloudsMainStackTop =
-    activeNavTab === "search" ? (
+    activeNavTab === "search" && webSubTab === "ai" ? (
       <div
         id="clouds-search-top-slot"
         className="h-full min-h-0 box-border p-3 [&>section]:h-full [&>section]:w-full [&>section]:border-0 [&>section]:rounded-[1.85rem]"
@@ -671,7 +679,7 @@ export default function Home() {
     ) : undefined;
 
   const cloudsMainStackBottom =
-    activeNavTab === "search" ? (
+    activeNavTab === "search" && webSubTab === "ai" ? (
       <div className="h-full min-h-0 box-border p-3 flex flex-col">
         <div
           id="clouds-search-bottom-slot"
@@ -693,7 +701,7 @@ export default function Home() {
         id="clouds-word-ai-slot"
         className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
       />
-    ) : activeNavTab === "search" ? (
+    ) : activeNavTab === "search" && webSubTab === "ai" ? (
       <div
         id="clouds-search-desk-slot"
         className="h-full min-h-0 [&>aside]:h-full [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0 [&>aside]:border-0 [&>aside]:rounded-[1.85rem]"
@@ -722,13 +730,21 @@ export default function Home() {
         id="clouds-word-saves-slot"
         className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0 [&>div]:rounded-[1.85rem]"
       />
+    ) : activeNavTab === "search" && webSubTab === "reg" ? (
+      <div className="h-full min-h-0 box-border flex items-center justify-center p-3 text-[10px] uppercase tracking-[0.2em] opacity-25">
+        Reg Web · Side
+      </div>
     ) : undefined;
 
   /* ================================================================ */
   /*  Render                                                          */
   /* ================================================================ */
   return (
-    <div className="h-[calc(100vh-16px)] w-full flex text-[var(--ch-text)] font-[family-name:var(--font-sans)] text-[12px] p-2 gap-2 overflow-hidden items-stretch no-drag mt-4">
+    <div className="h-[calc(100vh-32px)] w-full flex text-[var(--ch-text)] font-[family-name:var(--font-sans)] text-[12px] p-2 gap-2 overflow-hidden items-stretch no-drag mt-8">
+      <div
+        aria-hidden
+        className="drag-region fixed top-0 left-0 right-0 h-8 z-[60] bg-[var(--ch-bg-page)] border-b border-[var(--ch-border-faint)]"
+      />
       {/* ============================================================ */}
       {/*  MENU OVERLAY                                                 */}
       {/* ============================================================ */}
@@ -1369,6 +1385,8 @@ export default function Home() {
           onChatSubSelect={setChatSubTab}
           wordSubTab={wordSubTab}
           onWordSubSelect={setWordSubTab}
+          webSubTab={webSubTab}
+          onWebSubSelect={setWebSubTab}
         />
       </div>
 
@@ -1870,9 +1888,21 @@ export default function Home() {
         Keep SearchTab mounted while hidden so active AI search requests retain
         their stream listener, request id mapping, and in-memory result state.
       */}
-      <div style={{ display: activeNavTab === "search" ? "contents" : "none" }}>
+      <div
+        style={{
+          display:
+            activeNavTab === "search" && webSubTab === "ai"
+              ? "contents"
+              : "none",
+        }}
+      >
         <SearchTab />
       </div>
+      {activeNavTab === "search" && webSubTab === "reg" && (
+        <div className="flex-1 flex items-center justify-center text-[11px] uppercase tracking-[0.2em] opacity-30">
+          Reg Web — coming soon
+        </div>
+      )}
       {activeNavTab === "snippets" && <SnippetsTab />}
       </>
       )}
