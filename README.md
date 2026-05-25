@@ -2,7 +2,7 @@
 
 > **Alpha, v0.2.0.** Things will break. Thanks for being an early tester. File bugs in [Issues](https://github.com/HankTheMan2828/Central-Hub/issues).
 
-One desktop app for the things you actually do: chat with AI, draft documents, run AI-assisted research, practice typing, manage code snippets, and ship code with an autonomous coding agent. All in one window, themed how you like, updating itself in the background.
+One desktop app for the things you actually do: chat with AI, draft documents, run AI-assisted research, practice typing, and ship code with an autonomous coding agent. All in one window, themed how you like, updating itself in the background.
 
 **[⬇ Download for Windows](https://github.com/HankTheMan2828/Central-Hub/releases/latest/download/CentralHub-Setup.exe)**
 
@@ -26,8 +26,6 @@ Bones are stable. Expect rough edges. Things to know up front:
 **The Web.** AI Search for headless research with summarized answers. (Reg Web, a plain browser pane, is coming.)
 
 **Typing Practice.** WPM tracking and keyboard training.
-
-**Code Snippets.** Paste, save, reuse. Searchable.
 
 **Coding Agent.** An autonomous workspace for taking a project from prompt to working code, with a separate chat thread per workspace. Workbench or terminal mode.
 
