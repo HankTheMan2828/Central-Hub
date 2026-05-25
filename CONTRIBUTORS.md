@@ -3,6 +3,7 @@
 Central Hub is currently shaped by:
 
 - HankTheMan2828
+- Anthropic Claude
 - OpenAI Codex
 - DeepSeek V4
 - Qwen 3.6
