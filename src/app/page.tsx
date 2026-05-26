@@ -41,6 +41,7 @@ import {
 import { WordTab } from "@/components/tabs/WordTab";
 import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
+import { RegWebTab } from "@/components/tabs/RegWebTab";
 import { SnippetsTab } from "@/components/tabs/SnippetsTab";
 import {
   loadDefaultModelPreference,
@@ -54,6 +55,7 @@ import {
   LAYOUTS,
 } from "@/components/ThemeProvider";
 import { CloudsLayout } from "@/components/CloudsLayout";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 
 type IpcInvokeResult = {
   success?: boolean;
@@ -367,99 +369,100 @@ export default function Home() {
           </button>
 
           {modelDropdownOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-30"
-                onClick={() => {
-                  setModelDropdownOpen(false);
-                  setModelSearch("");
-                }}
-              />
-              <div className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[400px] overflow-hidden flex flex-col">
-                <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
-                    <input
-                      type="text"
-                      className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
-                      placeholder="Search models..."
-                      value={modelSearch}
-                      onChange={(e) => setModelSearch(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <div className="overflow-y-auto max-h-[320px]">
-                  {sharedChat.filteredModels.length === 0 ? (
-                    <div className="px-3 py-4 text-center">
-                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
-                      <span className="text-[11px] opacity-30">
-                        Loading models...
-                      </span>
-                    </div>
-                  ) : (
-                    (() => {
-                      const query = modelSearch.toLowerCase().trim();
-                      const filtered = query
-                        ? sharedChat.filteredModels.filter(
-                            (m) =>
-                              m.name.toLowerCase().includes(query) ||
-                              m.id.toLowerCase().includes(query) ||
-                              m.provider.toLowerCase().includes(query)
-                          )
-                        : sharedChat.filteredModels;
-
-                      return filtered.map((m) => {
-                        const key = modelKey(m);
-                        const isActive =
-                          sharedChat.currentModel?.provider === m.provider &&
-                          sharedChat.currentModel?.id === m.id;
-                        const isFav = sharedChat.favorites.includes(key);
-                        return (
-                          <button
-                            key={key}
-                            className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 group ${
-                              isActive ? "bg-white/[0.04]" : ""
-                            }`}
-                            onClick={() => handleSelectModel(m)}
-                          >
-                            <span
-                              className="shrink-0 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                sharedChat.toggleFavorite(key);
-                              }}
-                            >
-                              <Star
-                                className={`w-3 h-3 ${
-                                  isFav
-                                    ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
-                                    : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
-                                }`}
-                              />
-                            </span>
-                            <span className="truncate flex-1">{m.name}</span>
-                            {isActive && (
-                              <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                            )}
-                            <span
-                              className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                sharedChat.toggleBlock(key);
-                              }}
-                            >
-                              <Ban className="w-3 h-3 text-[var(--ch-error)]" />
-                            </span>
-                          </button>
-                        );
-                      });
-                    })()
-                  )}
-                </div>
-              </div>
-            </>
+            <div
+              className="fixed inset-0 z-30"
+              onClick={() => {
+                setModelDropdownOpen(false);
+                setModelSearch("");
+              }}
+            />
           )}
+          <AnimatedDropdown
+            open={modelDropdownOpen}
+            className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[400px] overflow-hidden flex flex-col"
+          >
+            <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                <input
+                  type="text"
+                  className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
+                  placeholder="Search models..."
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[320px]">
+              {sharedChat.filteredModels.length === 0 ? (
+                <div className="px-3 py-4 text-center">
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
+                  <span className="text-[11px] opacity-30">
+                    Loading models...
+                  </span>
+                </div>
+              ) : (
+                (() => {
+                  const query = modelSearch.toLowerCase().trim();
+                  const filtered = query
+                    ? sharedChat.filteredModels.filter(
+                        (m) =>
+                          m.name.toLowerCase().includes(query) ||
+                          m.id.toLowerCase().includes(query) ||
+                          m.provider.toLowerCase().includes(query)
+                      )
+                    : sharedChat.filteredModels;
+
+                  return filtered.map((m) => {
+                    const key = modelKey(m);
+                    const isActive =
+                      sharedChat.currentModel?.provider === m.provider &&
+                      sharedChat.currentModel?.id === m.id;
+                    const isFav = sharedChat.favorites.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 group ${
+                          isActive ? "bg-white/[0.04]" : ""
+                        }`}
+                        onClick={() => handleSelectModel(m)}
+                      >
+                        <span
+                          className="shrink-0 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            sharedChat.toggleFavorite(key);
+                          }}
+                        >
+                          <Star
+                            className={`w-3 h-3 ${
+                              isFav
+                                ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
+                                : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
+                            }`}
+                          />
+                        </span>
+                        <span className="truncate flex-1">{m.name}</span>
+                        {isActive && (
+                          <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                        )}
+                        <span
+                          className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            sharedChat.toggleBlock(key);
+                          }}
+                        >
+                          <Ban className="w-3 h-3 text-[var(--ch-error)]" />
+                        </span>
+                      </button>
+                    );
+                  });
+                })()
+              )}
+            </div>
+          </AnimatedDropdown>
         </div>
       </div>
 
@@ -661,8 +664,8 @@ export default function Home() {
         <TypingTab />
       </div>
     ) : activeNavTab === "search" && webSubTab === "reg" ? (
-      <div className="h-full min-h-0 box-border flex items-center justify-center p-3 text-[11px] uppercase tracking-[0.2em] opacity-30">
-        Reg Web — coming soon
+      <div className="h-full min-h-0 box-border flex p-3">
+        <RegWebTab sidePortalId="clouds-regweb-side-slot" />
       </div>
     ) : activeNavTab === "search" ? undefined : (
       <div className="h-full min-h-0 box-border flex flex-col p-3">
@@ -670,6 +673,11 @@ export default function Home() {
       </div>
     );
 
+  // Search tab: AI and Reg sub-tabs share the stacked-main + right-desk
+  // bubble structure so switching between them is a crossfade of bubble
+  // *contents* (handled by FadeSwap in CloudsLayout) instead of bubbles
+  // popping in/out. Reg's "coming soon" placeholders fill the same slots
+  // AI uses for its real portal targets.
   const cloudsMainStackTop =
     activeNavTab === "search" && webSubTab === "ai" ? (
       <div
@@ -678,6 +686,10 @@ export default function Home() {
       />
     ) : undefined;
 
+  // Reg Web intentionally uses a single big main cloud (no stack, no
+  // right desk) — see cloudsMainContent. Switching between AI Search
+  // (stacked) and Reg Web changes the silhouette instead of crossfading
+  // contents.
   const cloudsMainStackBottom =
     activeNavTab === "search" && webSubTab === "ai" ? (
       <div className="h-full min-h-0 box-border p-3 flex flex-col">
@@ -731,9 +743,10 @@ export default function Home() {
         className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0 [&>div]:rounded-[1.85rem]"
       />
     ) : activeNavTab === "search" && webSubTab === "reg" ? (
-      <div className="h-full min-h-0 box-border flex items-center justify-center p-3 text-[10px] uppercase tracking-[0.2em] opacity-25">
-        Reg Web · Side
-      </div>
+      <div
+        id="clouds-regweb-side-slot"
+        className="h-full min-h-0 [&>div]:h-full [&>div]:min-w-0 [&>div]:border-0 [&>div]:rounded-[1.85rem]"
+      />
     ) : undefined;
 
   /* ================================================================ */
@@ -952,107 +965,108 @@ export default function Home() {
                           </button>
 
                           {defaultModelDropdownOpen && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-30"
-                                onClick={() => {
-                                  setDefaultModelDropdownOpen(false);
-                                  setDefaultModelSearch("");
-                                }}
-                              />
-                              <div className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[340px] overflow-hidden flex flex-col">
-                                <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
-                                  <div className="relative">
-                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
-                                    <input
-                                      type="text"
-                                      className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
-                                      placeholder="Search models..."
-                                      value={defaultModelSearch}
-                                      onChange={(e) =>
-                                        setDefaultModelSearch(e.target.value)
-                                      }
-                                      autoFocus
-                                    />
-                                  </div>
-                                </div>
-                                <div className="overflow-y-auto max-h-[280px]">
-                                  <button
-                                    type="button"
-                                    className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
-                                      !defaultModel ? "bg-white/[0.04]" : ""
-                                    }`}
-                                    onClick={() => handleDefaultModelChange(null)}
-                                  >
-                                    <span className="truncate flex-1">
-                                      Use last selected model
-                                    </span>
-                                    {!defaultModel && (
-                                      <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                                    )}
-                                  </button>
-                                  {sharedChat.filteredModels.length === 0 ? (
-                                    <div className="px-3 py-4 text-center">
-                                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
-                                      <span className="text-[11px] opacity-30">
-                                        Loading models...
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    (() => {
-                                      const query = defaultModelSearch
-                                        .toLowerCase()
-                                        .trim();
-                                      const filtered = query
-                                        ? sharedChat.filteredModels.filter(
-                                            (m) =>
-                                              m.name
-                                                .toLowerCase()
-                                                .includes(query) ||
-                                              m.id
-                                                .toLowerCase()
-                                                .includes(query) ||
-                                              m.provider
-                                                .toLowerCase()
-                                                .includes(query)
-                                          )
-                                        : sharedChat.filteredModels;
-
-                                      return filtered.map((m) => {
-                                        const key = modelKey(m);
-                                        const isActive =
-                                          defaultModel?.provider ===
-                                            m.provider &&
-                                          defaultModel?.id === m.id;
-                                        return (
-                                          <button
-                                            key={key}
-                                            type="button"
-                                            className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
-                                              isActive ? "bg-white/[0.04]" : ""
-                                            }`}
-                                            onClick={() =>
-                                              handleDefaultModelChange({
-                                                provider: m.provider,
-                                                id: m.id,
-                                              })
-                                            }
-                                          >
-                                            <span className="truncate flex-1">
-                                              {m.name}
-                                            </span>
-                                            {isActive && (
-                                              <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                                            )}
-                                          </button>
-                                        );
-                                      });
-                                    })()
-                                  )}
-                                </div>
-                              </div>
-                            </>
+                            <div
+                              className="fixed inset-0 z-30"
+                              onClick={() => {
+                                setDefaultModelDropdownOpen(false);
+                                setDefaultModelSearch("");
+                              }}
+                            />
                           )}
+                          <AnimatedDropdown
+                            open={defaultModelDropdownOpen}
+                            className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[340px] overflow-hidden flex flex-col"
+                          >
+                            <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                                <input
+                                  type="text"
+                                  className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)]"
+                                  placeholder="Search models..."
+                                  value={defaultModelSearch}
+                                  onChange={(e) =>
+                                    setDefaultModelSearch(e.target.value)
+                                  }
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+                            <div className="overflow-y-auto max-h-[280px]">
+                              <button
+                                type="button"
+                                className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
+                                  !defaultModel ? "bg-white/[0.04]" : ""
+                                }`}
+                                onClick={() => handleDefaultModelChange(null)}
+                              >
+                                <span className="truncate flex-1">
+                                  Use last selected model
+                                </span>
+                                {!defaultModel && (
+                                  <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                )}
+                              </button>
+                              {sharedChat.filteredModels.length === 0 ? (
+                                <div className="px-3 py-4 text-center">
+                                  <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
+                                  <span className="text-[11px] opacity-30">
+                                    Loading models...
+                                  </span>
+                                </div>
+                              ) : (
+                                (() => {
+                                  const query = defaultModelSearch
+                                    .toLowerCase()
+                                    .trim();
+                                  const filtered = query
+                                    ? sharedChat.filteredModels.filter(
+                                        (m) =>
+                                          m.name
+                                            .toLowerCase()
+                                            .includes(query) ||
+                                          m.id
+                                            .toLowerCase()
+                                            .includes(query) ||
+                                          m.provider
+                                            .toLowerCase()
+                                            .includes(query)
+                                      )
+                                    : sharedChat.filteredModels;
+
+                                  return filtered.map((m) => {
+                                    const key = modelKey(m);
+                                    const isActive =
+                                      defaultModel?.provider ===
+                                        m.provider &&
+                                      defaultModel?.id === m.id;
+                                    return (
+                                      <button
+                                        key={key}
+                                        type="button"
+                                        className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] flex items-center gap-1.5 ${
+                                          isActive ? "bg-white/[0.04]" : ""
+                                        }`}
+                                        onClick={() =>
+                                          handleDefaultModelChange({
+                                            provider: m.provider,
+                                            id: m.id,
+                                          })
+                                        }
+                                      >
+                                        <span className="truncate flex-1">
+                                          {m.name}
+                                        </span>
+                                        {isActive && (
+                                          <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                        )}
+                                      </button>
+                                    );
+                                  });
+                                })()
+                              )}
+                            </div>
+                          </AnimatedDropdown>
                         </div>
                         <div className="flex items-center gap-2 py-1.5">
                           <span
@@ -1360,6 +1374,7 @@ export default function Home() {
               ? "tall"
               : "default"
           }
+          transitionKey={`${activeNavTab}:${chatSubTab}:${webSubTab}:${wordSubTab}`}
           onOpenMenu={openSettingsMenu}
         />
       ) : (
@@ -1468,109 +1483,110 @@ export default function Home() {
                 </button>
 
                 {modelDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-30"
-                      onClick={() => {
-                        setModelDropdownOpen(false);
-                        setModelSearch("");
-                      }}
-                    />
-                    <div className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[400px] overflow-hidden flex flex-col">
-                      <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
-                          <input
-                            type="text"
-                            className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)] transition-colors"
-                            placeholder="Search models…"
-                            value={modelSearch}
-                            onChange={(e) => setModelSearch(e.target.value)}
-                            autoFocus
-                          />
-                        </div>
-                      </div>
-                      <div className="overflow-y-auto max-h-[320px]">
-                        {sharedChat.filteredModels.length === 0 ? (
-                          <div className="px-3 py-4 text-center">
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
-                            <span className="text-[11px] opacity-30">
-                              Loading models…
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            {(() => {
-                              const query = modelSearch.toLowerCase().trim();
-                              const filtered = query
-                                ? sharedChat.filteredModels.filter(
-                                    (m) =>
-                                      m.name
-                                        .toLowerCase()
-                                        .includes(query) ||
-                                      m.id.toLowerCase().includes(query) ||
-                                      m.provider
-                                        .toLowerCase()
-                                        .includes(query)
-                                  )
-                                : sharedChat.filteredModels;
-
-                              return filtered.map((m) => {
-                                const key = modelKey(m);
-                                const isActive =
-                                  sharedChat.currentModel
-                                    ?.provider === m.provider &&
-                                  sharedChat.currentModel?.id === m.id;
-                                const isFav =
-                                  sharedChat.favorites.includes(key);
-                                return (
-                                  <button
-                                    key={key}
-                                    className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] transition-colors flex items-center gap-1.5 group ${
-                                      isActive ? "bg-white/[0.04]" : ""
-                                    }`}
-                                    onClick={() => handleSelectModel(m)}
-                                  >
-                                    <span
-                                      className="shrink-0 cursor-pointer"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        sharedChat.toggleFavorite(key);
-                                      }}
-                                    >
-                                      <Star
-                                        className={`w-3 h-3 transition-colors ${
-                                          isFav
-                                            ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
-                                            : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
-                                        }`}
-                                      />
-                                    </span>
-                                    <span className="truncate flex-1">
-                                      {m.name}
-                                    </span>
-                                    {isActive && (
-                                      <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                                    )}
-                                    <span
-                                      className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer transition-opacity"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        sharedChat.toggleBlock(key);
-                                      }}
-                                    >
-                                      <Ban className="w-3 h-3 text-[var(--ch-error)]" />
-                                    </span>
-                                  </button>
-                                );
-                              });
-                            })()}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => {
+                      setModelDropdownOpen(false);
+                      setModelSearch("");
+                    }}
+                  />
                 )}
+                <AnimatedDropdown
+                  open={modelDropdownOpen}
+                  className="absolute top-full left-0 right-0 mt-1 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl z-40 max-h-[400px] overflow-hidden flex flex-col"
+                >
+                  <div className="px-2 py-1.5 border-b border-[var(--ch-border-subtle)] shrink-0">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 opacity-25" />
+                      <input
+                        type="text"
+                        className="w-full bg-[var(--ch-bg-elevated)] border border-[var(--ch-border-subtle)] text-[11px] pl-6 pr-2 py-1.5 rounded-sm outline-none focus:border-[var(--ch-text-faint)] transition-colors"
+                        placeholder="Search models…"
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto max-h-[320px]">
+                    {sharedChat.filteredModels.length === 0 ? (
+                      <div className="px-3 py-4 text-center">
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 opacity-40" />
+                        <span className="text-[11px] opacity-30">
+                          Loading models…
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {(() => {
+                          const query = modelSearch.toLowerCase().trim();
+                          const filtered = query
+                            ? sharedChat.filteredModels.filter(
+                                (m) =>
+                                  m.name
+                                    .toLowerCase()
+                                    .includes(query) ||
+                                  m.id.toLowerCase().includes(query) ||
+                                  m.provider
+                                    .toLowerCase()
+                                    .includes(query)
+                              )
+                            : sharedChat.filteredModels;
+
+                          return filtered.map((m) => {
+                            const key = modelKey(m);
+                            const isActive =
+                              sharedChat.currentModel
+                                ?.provider === m.provider &&
+                              sharedChat.currentModel?.id === m.id;
+                            const isFav =
+                              sharedChat.favorites.includes(key);
+                            return (
+                              <button
+                                key={key}
+                                className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-white/[0.06] transition-colors flex items-center gap-1.5 group ${
+                                  isActive ? "bg-white/[0.04]" : ""
+                                }`}
+                                onClick={() => handleSelectModel(m)}
+                              >
+                                <span
+                                  className="shrink-0 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sharedChat.toggleFavorite(key);
+                                  }}
+                                >
+                                  <Star
+                                    className={`w-3 h-3 transition-colors ${
+                                      isFav
+                                        ? "text-[var(--ch-gold)] fill-[var(--ch-gold)]"
+                                        : "opacity-0 group-hover:opacity-20 hover:!opacity-50"
+                                    }`}
+                                  />
+                                </span>
+                                <span className="truncate flex-1">
+                                  {m.name}
+                                </span>
+                                {isActive && (
+                                  <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                                )}
+                                <span
+                                  className="shrink-0 opacity-0 group-hover:opacity-30 hover:!opacity-80 cursor-pointer transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sharedChat.toggleBlock(key);
+                                  }}
+                                >
+                                  <Ban className="w-3 h-3 text-[var(--ch-error)]" />
+                                </span>
+                              </button>
+                            );
+                          });
+                        })()}
+                      </>
+                    )}
+                  </div>
+                </AnimatedDropdown>
               </div>
 
               {/* Model details */}
@@ -1898,11 +1914,20 @@ export default function Home() {
       >
         <SearchTab />
       </div>
-      {activeNavTab === "search" && webSubTab === "reg" && (
-        <div className="flex-1 flex items-center justify-center text-[11px] uppercase tracking-[0.2em] opacity-30">
-          Reg Web — coming soon
-        </div>
-      )}
+      {/*
+        Keep RegWebTab mounted while hidden so each <webview>'s page state
+        (scroll, form input, login session) survives a nav-tab switch.
+      */}
+      <div
+        style={{
+          display:
+            activeNavTab === "search" && webSubTab === "reg"
+              ? "contents"
+              : "none",
+        }}
+      >
+        <RegWebTab />
+      </div>
       {activeNavTab === "snippets" && <SnippetsTab />}
       </>
       )}

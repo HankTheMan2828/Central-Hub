@@ -33,6 +33,7 @@ require('./main/ipc-word').register(ipcMain);
 require('./main/ipc-docs').register(ipcMain);
 require('./main/ipc-search').register(ipcMain);
 require('./main/ipc-stt').register(ipcMain);
+require('./main/ipc-regweb').register(ipcMain);
 
 /* ------------------------------------------------------------------ */
 /*  Window creation                                                   */
@@ -50,6 +51,9 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      // Enables the <webview> tag used by Reg Web. The Reg Web partition
+      // (`persist:regweb`) is configured for privacy in main/ipc-regweb.js.
+      webviewTag: true,
     },
     titleBarStyle: 'hidden',
     titleBarOverlay: {

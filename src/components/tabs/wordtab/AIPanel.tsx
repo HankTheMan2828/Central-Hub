@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { usePiChat } from "@/hooks/usePiChat";
 import { MarkdownContent } from "@/lib/markdown";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 import { htmlToMarkdown } from "./exporters";
 import { markdownToHtml } from "./markdownToHtml";
 
@@ -293,62 +294,63 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
             <ChevronDown className="w-3 h-3 text-[var(--ch-text-faint)] shrink-0" />
           </button>
           {modelOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-30"
-                onClick={() => {
-                  setModelOpen(false);
-                  setModelSearch("");
-                }}
-              />
-              <div className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-40 max-h-[280px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden">
-                <input
-                  type="text"
-                  autoFocus
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Filter models…"
-                  className="w-full bg-[var(--ch-bg-inset)] border-b border-[var(--ch-border-subtle)] px-2 py-1.5 text-[10px] font-mono text-[var(--ch-text)] placeholder:text-[var(--ch-text-faint)] focus:outline-none"
-                />
-                <div className="overflow-y-auto">
-                  {filtered.length === 0 ? (
-                    <div className="px-2 py-3 text-[10px] text-[var(--ch-text-faint)] italic text-center">
-                      No models available.
-                    </div>
-                  ) : (
-                    filtered.map((m) => {
-                      const isActive =
-                        chat.currentModel?.provider === m.provider &&
-                        chat.currentModel?.id === m.id;
-                      return (
-                        <button
-                          key={`${m.provider}:${m.id}`}
-                          type="button"
-                          onClick={async () => {
-                            setModelOpen(false);
-                            setModelSearch("");
-                            try {
-                              await chat.setModel(m.provider, m.id);
-                            } catch (err) {
-                              console.warn("Set model failed:", err);
-                            }
-                          }}
-                          className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-mono text-left hover:bg-white/[0.06] ${
-                            isActive ? "bg-white/[0.04] text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
-                          }`}
-                        >
-                          <span className="flex-1 truncate">{m.name}</span>
-                          {isActive && (
-                            <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </>
+            <div
+              className="fixed inset-0 z-30"
+              onClick={() => {
+                setModelOpen(false);
+                setModelSearch("");
+              }}
+            />
           )}
+          <AnimatedDropdown
+            open={modelOpen}
+            className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-40 max-h-[280px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden"
+          >
+            <input
+              type="text"
+              autoFocus
+              value={modelSearch}
+              onChange={(e) => setModelSearch(e.target.value)}
+              placeholder="Filter models…"
+              className="w-full bg-[var(--ch-bg-inset)] border-b border-[var(--ch-border-subtle)] px-2 py-1.5 text-[10px] font-mono text-[var(--ch-text)] placeholder:text-[var(--ch-text-faint)] focus:outline-none"
+            />
+            <div className="overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="px-2 py-3 text-[10px] text-[var(--ch-text-faint)] italic text-center">
+                  No models available.
+                </div>
+              ) : (
+                filtered.map((m) => {
+                  const isActive =
+                    chat.currentModel?.provider === m.provider &&
+                    chat.currentModel?.id === m.id;
+                  return (
+                    <button
+                      key={`${m.provider}:${m.id}`}
+                      type="button"
+                      onClick={async () => {
+                        setModelOpen(false);
+                        setModelSearch("");
+                        try {
+                          await chat.setModel(m.provider, m.id);
+                        } catch (err) {
+                          console.warn("Set model failed:", err);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-mono text-left hover:bg-white/[0.06] ${
+                        isActive ? "bg-white/[0.04] text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
+                      }`}
+                    >
+                      <span className="flex-1 truncate">{m.name}</span>
+                      {isActive && (
+                        <Check className="w-3 h-3 text-[var(--ch-success)] shrink-0" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </AnimatedDropdown>
         </div>
         <div className="text-[9px] font-mono text-[var(--ch-text-faint)] uppercase tracking-widest shrink-0 text-right">
           <div className="text-[var(--ch-success)]">${cost.toFixed(3)}</div>

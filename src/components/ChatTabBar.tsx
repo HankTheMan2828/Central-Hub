@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Plus, X, AlertTriangle } from "lucide-react";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 
 interface ChatTab {
   id: string;
@@ -96,33 +97,34 @@ export function ChatTabBar({
             </button>
 
             {/* Confirmation tooltip */}
-            {isConfirming && (
-              <div className="absolute top-full left-0 mt-1 z-50 border border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] rounded-sm shadow-lg px-2.5 py-2 flex items-center gap-2 whitespace-nowrap">
-                <AlertTriangle className="w-3 h-3 text-[var(--ch-error)] shrink-0" />
-                <span className="text-[11px] text-[var(--ch-error-text)]">
-                  {isOnlyTab ? "Start new chat?" : `Close ${tab.title}?`}
-                </span>
-                <button
-                  className="px-2 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-error-bg)] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(tab.id);
-                    setConfirmId(null);
-                  }}
-                >
-                  Yes
-                </button>
-                <button
-                  className="px-2 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmId(null);
-                  }}
-                >
-                  No
-                </button>
-              </div>
-            )}
+            <AnimatedDropdown
+              open={isConfirming}
+              className="absolute top-full left-0 mt-1 z-50 border border-[var(--ch-error-border)] bg-[var(--ch-error-bg)] rounded-sm shadow-lg px-2.5 py-2 flex items-center gap-2 whitespace-nowrap"
+            >
+              <AlertTriangle className="w-3 h-3 text-[var(--ch-error)] shrink-0" />
+              <span className="text-[11px] text-[var(--ch-error-text)]">
+                {isOnlyTab ? "Start new chat?" : `Close ${tab.title}?`}
+              </span>
+              <button
+                className="px-2 py-0.5 border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-error-bg)] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(tab.id);
+                  setConfirmId(null);
+                }}
+              >
+                Yes
+              </button>
+              <button
+                className="px-2 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm text-[10px] uppercase tracking-wider transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmId(null);
+                }}
+              >
+                No
+              </button>
+            </AnimatedDropdown>
           </div>
         );
       })}

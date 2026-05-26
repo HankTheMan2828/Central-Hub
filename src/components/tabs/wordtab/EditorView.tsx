@@ -26,6 +26,7 @@ import {
   MARGIN_PRESETS,
   type StylePreset,
 } from "./pageOptions";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 import { RibbonTabs, type RibbonTabId } from "./ribbon/RibbonTabs";
 import { HomeRibbon } from "./ribbon/HomeRibbon";
 import { LayoutRibbon } from "./ribbon/LayoutRibbon";
@@ -1140,24 +1141,26 @@ export const EditorView = forwardRef(function EditorView(
             Export
             <ChevronDown className="w-3 h-3" />
           </button>
-          {exportOpen && (
-            <div className="clouds-coding-dropdown-panel absolute top-full right-0 mt-1 z-30 min-w-[180px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden">
-              {exportFormats.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => {
-                    setExportOpen(false);
-                    onExport(f.id);
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-mono text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)] transition-colors text-left"
-                >
-                  <span>{f.label}</span>
-                  <span className="text-[9px] text-[var(--ch-text-faint)]">{f.ext}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <AnimatedDropdown
+            open={exportOpen}
+            originY="top"
+            className="clouds-coding-dropdown-panel absolute top-full right-0 mt-1 z-30 min-w-[180px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden"
+          >
+            {exportFormats.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setExportOpen(false);
+                  onExport(f.id);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-mono text-[var(--ch-text)] hover:bg-[var(--ch-accent-5)] hover:text-[var(--ch-accent)] transition-colors text-left"
+              >
+                <span>{f.label}</span>
+                <span className="text-[9px] text-[var(--ch-text-faint)]">{f.ext}</span>
+              </button>
+            ))}
+          </AnimatedDropdown>
         </div>
       </header>
 

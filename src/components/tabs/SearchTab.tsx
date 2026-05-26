@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 import {
   Search,
   X,
@@ -1138,30 +1139,31 @@ export function SearchTab({
                   }`}
                 />
               </button>
-              {presentOpen && (
-                <div className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-30 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden p-1 flex flex-col">
-                  {PRESENTATION_OPTIONS.map((option) => {
-                    const selected = (active?.presentation ?? "summary") === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setPresentOpen(false);
-                          setActivePresentation(option.id);
-                        }}
-                        className={`w-full text-left px-2 py-1.5 rounded-sm text-[10px] font-mono ${
-                          selected
-                            ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
-                            : "text-[var(--ch-text)] hover:bg-[var(--ch-bg-hover)] hover:text-[var(--ch-accent)]"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <AnimatedDropdown
+                open={presentOpen}
+                className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-30 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden p-1 flex flex-col"
+              >
+                {PRESENTATION_OPTIONS.map((option) => {
+                  const selected = (active?.presentation ?? "summary") === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setPresentOpen(false);
+                        setActivePresentation(option.id);
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded-sm text-[10px] font-mono ${
+                        selected
+                          ? "bg-[var(--ch-accent-5)] text-[var(--ch-accent)]"
+                          : "text-[var(--ch-text)] hover:bg-[var(--ch-bg-hover)] hover:text-[var(--ch-accent)]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </AnimatedDropdown>
             </div>
           </div>
         </div>

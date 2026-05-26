@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { ChevronDown } from "lucide-react";
+import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 
 export function ToolbarBtn({
   title,
@@ -100,15 +101,14 @@ export function DropdownButton({
         {trailing}
         <ChevronDown className="w-3 h-3" />
       </button>
-      {open && (
-        <div
-          className={`clouds-coding-dropdown-panel absolute top-full mt-1 z-30 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden ${
-            align === "right" ? "right-0" : "left-0"
-          } ${panelClass ?? "min-w-[180px]"}`}
-        >
-          {typeof children === "function" ? children(close) : children}
-        </div>
-      )}
+      <AnimatedDropdown
+        open={open}
+        className={`clouds-coding-dropdown-panel absolute top-full mt-1 z-30 border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl overflow-hidden ${
+          align === "right" ? "right-0" : "left-0"
+        } ${panelClass ?? "min-w-[180px]"}`}
+      >
+        {typeof children === "function" ? children(close) : children}
+      </AnimatedDropdown>
     </div>
   );
 }

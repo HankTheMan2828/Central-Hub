@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Menu, Settings } from "lucide-react";
 
 interface CloudsLayoutProps {
@@ -20,6 +21,38 @@ interface CloudsLayoutProps {
   mainSize?: "default" | "tall";
   nav: ReactNode;
   onOpenMenu: () => void;
+  // Identity string used to drive per-slot crossfades. When this changes,
+  // every FadeSwap re-keys, so old content fades out while new fades in.
+  transitionKey?: string;
+}
+
+// Cross-fades children when transitionKey changes. The wrapping div is
+// position: relative; each child mounts position: absolute over it so old
+// and new can overlap during the ~180ms fade. Sized to fill its parent —
+// BubblePanel's inner provides h-full bounds.
+function FadeSwap({
+  transitionKey,
+  children,
+}: {
+  transitionKey: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative h-full w-full min-h-0 min-w-0">
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={transitionKey}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="absolute inset-0 min-h-0 min-w-0"
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 }
 
 function BubblePanel({
@@ -55,6 +88,7 @@ export function CloudsLayout({
   mainSize = "default",
   nav,
   onOpenMenu,
+  transitionKey = "default",
 }: CloudsLayoutProps) {
   const [navOpen, setNavOpen] = useState(false);
   const menuBubbleRef = useRef<HTMLElement>(null);
@@ -165,7 +199,7 @@ export function CloudsLayout({
               className="clouds-left-panel clouds-side-panel self-center rounded-[2.5rem]"
               innerClassName="clouds-side-bubble rounded-[1.85rem]"
             >
-              {left}
+              <FadeSwap transitionKey={transitionKey}>{left}</FadeSwap>
             </BubblePanel>
           )}
           {hasMainStack ? (
@@ -175,7 +209,7 @@ export function CloudsLayout({
                   className="clouds-main-stack-top rounded-[2.65rem] p-3"
                   innerClassName="clouds-main-bubble clouds-main-bubble-stack-top rounded-[1.9rem]"
                 >
-                  {mainStackTop}
+                  <FadeSwap transitionKey={transitionKey}>{mainStackTop}</FadeSwap>
                 </BubblePanel>
               )}
               {mainStackBottom && (
@@ -183,7 +217,7 @@ export function CloudsLayout({
                   className="flex-1 rounded-[2.85rem] p-3"
                   innerClassName="clouds-main-bubble clouds-main-bubble-stack-bottom rounded-[2.05rem]"
                 >
-                  {mainStackBottom}
+                  <FadeSwap transitionKey={transitionKey}>{mainStackBottom}</FadeSwap>
                 </BubblePanel>
               )}
             </div>
@@ -192,7 +226,7 @@ export function CloudsLayout({
               className="clouds-main-panel rounded-[3.5rem]"
               innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
             >
-              {main}
+              <FadeSwap transitionKey={transitionKey}>{main}</FadeSwap>
             </BubblePanel>
           )}
           {hasRightStack ? (
@@ -202,7 +236,7 @@ export function CloudsLayout({
                   className="clouds-stack-top rounded-[2.35rem] p-3"
                   innerClassName="clouds-side-bubble clouds-side-bubble-square rounded-[1.6rem]"
                 >
-                  {rightStackTop}
+                  <FadeSwap transitionKey={transitionKey}>{rightStackTop}</FadeSwap>
                 </BubblePanel>
               )}
               {rightStackBottom && (
@@ -210,7 +244,7 @@ export function CloudsLayout({
                   className="flex-1 rounded-[2.65rem] p-3"
                   innerClassName="clouds-side-bubble clouds-side-bubble-stack rounded-[1.9rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
                 >
-                  {rightStackBottom}
+                  <FadeSwap transitionKey={transitionKey}>{rightStackBottom}</FadeSwap>
                 </BubblePanel>
               )}
             </div>
@@ -221,7 +255,7 @@ export function CloudsLayout({
               } self-center rounded-[2.5rem]`}
               innerClassName="clouds-side-bubble rounded-[1.85rem] [&>aside]:w-full [&>aside]:max-w-none [&>aside]:min-w-0"
             >
-              {right}
+              <FadeSwap transitionKey={transitionKey}>{right}</FadeSwap>
             </BubblePanel>
           ) : null}
         </div>
