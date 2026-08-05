@@ -11,7 +11,7 @@ import {
   Tag as TagIcon,
 } from "lucide-react";
 
-type Snippet = {
+type NoteItem = {
   id: string;
   title: string;
   body: string;
@@ -20,51 +20,58 @@ type Snippet = {
   updatedAt: number;
 };
 
-const STORAGE_KEY = "snippets-v1";
-const MAX_SNIPPETS = 500;
+/** New key; still migrates from legacy snippets-v1 on first load. */
+const STORAGE_KEY = "notes-v1";
+const LEGACY_STORAGE_KEY = "snippets-v1";
+const MAX_NOTES = 500;
 
 function uid() {
-  return `snip_${Date.now().toString(36)}_${Math.random()
+  return `note_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
 }
 
-function loadSnippets(): Snippet[] {
+function normalizeList(parsed: unknown): NoteItem[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(
+      (s) =>
+        s &&
+        typeof s.id === "string" &&
+        typeof s.title === "string" &&
+        typeof s.body === "string"
+    )
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      body: s.body,
+      tags: Array.isArray(s.tags)
+        ? s.tags.filter((t: unknown) => typeof t === "string")
+        : [],
+      createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
+      updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : Date.now(),
+    }));
+}
+
+function loadNotes(): NoteItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (s) =>
-          s &&
-          typeof s.id === "string" &&
-          typeof s.title === "string" &&
-          typeof s.body === "string"
-      )
-      .map((s) => ({
-        id: s.id,
-        title: s.title,
-        body: s.body,
-        tags: Array.isArray(s.tags)
-          ? s.tags.filter((t: unknown) => typeof t === "string")
-          : [],
-        createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
-        updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : Date.now(),
-      }));
+    return normalizeList(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
-function saveSnippets(list: Snippet[]) {
+function saveNotes(list: NoteItem[]) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (err) {
-    console.warn("Failed to save snippets:", err);
+    console.warn("Failed to save notes:", err);
   }
 }
 
@@ -89,58 +96,58 @@ function formatRelative(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-export function SnippetsTab() {
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
+export function NotesTab() {
+  const [notes, setNotes] = useState<NoteItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const loaded = loadSnippets();
-    setSnippets(loaded);
+    const loaded = loadNotes();
+    setNotes(loaded);
     if (loaded.length > 0) setActiveId(loaded[0].id);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (hydrated) saveSnippets(snippets);
-  }, [snippets, hydrated]);
+    if (hydrated) saveNotes(notes);
+  }, [notes, hydrated]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const sorted = [...snippets].sort((a, b) => b.updatedAt - a.updatedAt);
+    const sorted = [...notes].sort((a, b) => b.updatedAt - a.updatedAt);
     if (!q) return sorted;
-    return sorted.filter((s) => {
-      const hay = `${s.title}\n${s.body}\n${s.tags.join(" ")}`.toLowerCase();
+    return sorted.filter((item) => {
+      const hay = `${item.title}\n${item.body}\n${item.tags.join(" ")}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [snippets, query]);
+  }, [notes, query]);
 
   const active = useMemo(
-    () => snippets.find((s) => s.id === activeId) ?? null,
-    [snippets, activeId]
+    () => notes.find((item) => item.id === activeId) ?? null,
+    [notes, activeId]
   );
 
   const handleNew = useCallback(() => {
-    if (snippets.length >= MAX_SNIPPETS) return;
+    if (notes.length >= MAX_NOTES) return;
     const now = Date.now();
-    const fresh: Snippet = {
+    const fresh: NoteItem = {
       id: uid(),
-      title: "Untitled snippet",
+      title: "Untitled note",
       body: "",
       tags: [],
       createdAt: now,
       updatedAt: now,
     };
-    setSnippets((prev) => [fresh, ...prev]);
+    setNotes((prev) => [fresh, ...prev]);
     setActiveId(fresh.id);
-  }, [snippets.length]);
+  }, [notes.length]);
 
   const handleDelete = useCallback(
     (id: string) => {
-      setSnippets((prev) => {
-        const next = prev.filter((s) => s.id !== id);
+      setNotes((prev) => {
+        const next = prev.filter((item) => item.id !== id);
         if (activeId === id) {
           setActiveId(next[0]?.id ?? null);
         }
@@ -151,22 +158,22 @@ export function SnippetsTab() {
   );
 
   const handleUpdate = useCallback(
-    (id: string, patch: Partial<Pick<Snippet, "title" | "body" | "tags">>) => {
-      setSnippets((prev) =>
-        prev.map((s) =>
-          s.id === id ? { ...s, ...patch, updatedAt: Date.now() } : s
+    (id: string, patch: Partial<Pick<NoteItem, "title" | "body" | "tags">>) => {
+      setNotes((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item
         )
       );
     },
     []
   );
 
-  const handleCopy = useCallback(async (snip: Snippet) => {
+  const handleCopy = useCallback(async (item: NoteItem) => {
     try {
-      await navigator.clipboard.writeText(snip.body);
-      setCopiedId(snip.id);
+      await navigator.clipboard.writeText(item.body);
+      setCopiedId(item.id);
       window.setTimeout(() => {
-        setCopiedId((curr) => (curr === snip.id ? null : curr));
+        setCopiedId((curr) => (curr === item.id ? null : curr));
       }, 1200);
     } catch (err) {
       console.warn("Clipboard write failed:", err);
@@ -178,10 +185,10 @@ export function SnippetsTab() {
       <header className="px-4 py-2 border-b border-[var(--ch-border-subtle)] flex items-center gap-2 shrink-0">
         <BookOpen className="w-3.5 h-3.5 text-[var(--ch-accent)]" />
         <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ch-accent)]">
-          Snippets
+          Notes/Files
         </span>
         <span className="ml-2 text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono">
-          {snippets.length}/{MAX_SNIPPETS}
+          {notes.length}/{MAX_NOTES}
         </span>
         <span className="ml-auto text-[9px] uppercase tracking-widest text-[var(--ch-success)] font-mono">
           Local
@@ -205,8 +212,8 @@ export function SnippetsTab() {
             <button
               type="button"
               onClick={handleNew}
-              disabled={snippets.length >= MAX_SNIPPETS}
-              title="New snippet"
+              disabled={notes.length >= MAX_NOTES}
+              title="New note"
               className="shrink-0 w-7 h-7 flex items-center justify-center border border-[var(--ch-border)] rounded-sm text-[var(--ch-accent)] hover:bg-[var(--ch-accent-10)] hover:border-[#FFB347]/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -216,19 +223,19 @@ export function SnippetsTab() {
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="p-4 text-[11px] text-[var(--ch-text-faint)] italic text-center">
-                {snippets.length === 0
-                  ? "No snippets yet — click + to create one."
+                {notes.length === 0
+                  ? "No notes yet — click + to create one."
                   : "No matches."}
               </div>
             ) : (
               <ul className="py-1">
-                {filtered.map((snip) => {
-                  const isActive = snip.id === activeId;
+                {filtered.map((item) => {
+                  const isActive = item.id === activeId;
                   return (
-                    <li key={snip.id}>
+                    <li key={item.id}>
                       <button
                         type="button"
-                        onClick={() => setActiveId(snip.id)}
+                        onClick={() => setActiveId(item.id)}
                         className={`w-full text-left px-3 py-2 border-l-2 transition-colors ${
                           isActive
                             ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
@@ -240,20 +247,20 @@ export function SnippetsTab() {
                             isActive ? "text-[var(--ch-accent)]" : "text-[var(--ch-text)]"
                           }`}
                         >
-                          {snip.title || "Untitled"}
+                          {item.title || "Untitled"}
                         </div>
                         <div className="text-[10px] text-[var(--ch-text-faint)] truncate mt-0.5">
-                          {snip.body.split("\n")[0] || "(empty)"}
+                          {item.body.split("\n")[0] || "(empty)"}
                         </div>
                         <div className="flex items-center gap-1.5 mt-1 text-[9px] text-[var(--ch-text-faint)] font-mono uppercase tracking-wider">
-                          <span>{formatRelative(snip.updatedAt)}</span>
-                          {snip.tags.length > 0 && (
+                          <span>{formatRelative(item.updatedAt)}</span>
+                          {item.tags.length > 0 && (
                             <>
                               <span className="text-[var(--ch-border)]">·</span>
                               <span className="truncate text-[var(--ch-success)] opacity-70">
-                                {snip.tags.slice(0, 3).join(", ")}
-                                {snip.tags.length > 3
-                                  ? ` +${snip.tags.length - 3}`
+                                {item.tags.slice(0, 3).join(", ")}
+                                {item.tags.length > 3
+                                  ? ` +${item.tags.length - 3}`
                                   : ""}
                               </span>
                             </>
@@ -272,12 +279,12 @@ export function SnippetsTab() {
         <section className="flex-1 flex flex-col min-h-0 min-w-0">
           {!active ? (
             <div className="flex-1 flex items-center justify-center text-[var(--ch-text-faint)] text-[12px] italic px-8 text-center">
-              Select a snippet, or click + to create one.
+              Select a note, or click + to create one.
             </div>
           ) : (
-            <SnippetEditor
+            <NoteEditor
               key={active.id}
-              snippet={active}
+              note={active}
               copied={copiedId === active.id}
               onCopy={() => handleCopy(active)}
               onDelete={() => handleDelete(active.id)}
@@ -291,45 +298,45 @@ export function SnippetsTab() {
 }
 
 type EditorProps = {
-  snippet: Snippet;
+  note: NoteItem;
   copied: boolean;
   onCopy: () => void;
   onDelete: () => void;
-  onChange: (patch: Partial<Pick<Snippet, "title" | "body" | "tags">>) => void;
+  onChange: (patch: Partial<Pick<NoteItem, "title" | "body" | "tags">>) => void;
 };
 
-function SnippetEditor({
-  snippet,
+function NoteEditor({
+  note,
   copied,
   onCopy,
   onDelete,
   onChange,
 }: EditorProps) {
-  const [tagsDraft, setTagsDraft] = useState(snippet.tags.join(", "));
+  const [tagsDraft, setTagsDraft] = useState(note.tags.join(", "));
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
-    setTagsDraft(snippet.tags.join(", "));
+    setTagsDraft(note.tags.join(", "));
     setConfirmDelete(false);
-  }, [snippet.id, snippet.tags]);
+  }, [note.id, note.tags]);
 
   const commitTags = useCallback(() => {
     const parsed = parseTags(tagsDraft);
-    const sameLength = parsed.length === snippet.tags.length;
+    const sameLength = parsed.length === note.tags.length;
     const sameContent =
-      sameLength && parsed.every((t, i) => t === snippet.tags[i]);
+      sameLength && parsed.every((t, i) => t === note.tags[i]);
     if (!sameContent) onChange({ tags: parsed });
     setTagsDraft(parsed.join(", "));
-  }, [tagsDraft, snippet.tags, onChange]);
+  }, [tagsDraft, note.tags, onChange]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-4 py-2 border-b border-[var(--ch-border-subtle)] flex items-center gap-2 shrink-0">
         <input
           type="text"
-          value={snippet.title}
+          value={note.title}
           onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="Snippet title"
+          placeholder="Note title"
           className="flex-1 bg-transparent text-[12px] font-mono text-[var(--ch-accent)] placeholder:text-[var(--ch-text-faint)] focus:outline-none"
         />
         <button
@@ -357,7 +364,7 @@ function SnippetEditor({
             else setConfirmDelete(true);
           }}
           onBlur={() => setConfirmDelete(false)}
-          title={confirmDelete ? "Click again to confirm" : "Delete snippet"}
+          title={confirmDelete ? "Click again to confirm" : "Delete note"}
           className={`shrink-0 flex items-center gap-1.5 px-2 py-1 border rounded-sm text-[10px] uppercase tracking-widest font-mono transition-colors ${
             confirmDelete
               ? "border-[var(--ch-error)] text-[var(--ch-error)] bg-[var(--ch-error-bg)]"
@@ -386,14 +393,14 @@ function SnippetEditor({
           className="flex-1 bg-transparent text-[10px] font-mono text-[var(--ch-success)] placeholder:text-[var(--ch-border)] focus:outline-none uppercase tracking-wider"
         />
         <span className="text-[9px] uppercase tracking-widest text-[var(--ch-text-faint)] font-mono">
-          {formatRelative(snippet.updatedAt)}
+          {formatRelative(note.updatedAt)}
         </span>
       </div>
 
       <textarea
-        value={snippet.body}
+        value={note.body}
         onChange={(e) => onChange({ body: e.target.value })}
-        placeholder="Write your prompt or snippet here…"
+        placeholder="Write your note here…"
         spellCheck={false}
         className="flex-1 w-full bg-[var(--ch-bg-page)] text-[12px] font-mono text-[var(--ch-text)] placeholder:text-[var(--ch-border)] p-4 resize-none focus:outline-none leading-relaxed"
       />

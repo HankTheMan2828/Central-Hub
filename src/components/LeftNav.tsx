@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
-export type TabId = "chat" | "word" | "typing" | "search" | "snippets";
+export type TabId = "chat" | "word" | "typing" | "search" | "notes";
 export type ChatSubTabId = "plain" | "coding";
 export type WordSubTabId = "editor" | "saves";
 export type WebSubTabId = "ai" | "reg";
@@ -62,7 +62,7 @@ const TABS: readonly NavTab[] = [
       { id: "reg", label: "Reg Web", icon: Compass },
     ],
   },
-  { id: "snippets", label: "Snippets", icon: BookOpen },
+  { id: "notes", label: "Notes/Files", icon: BookOpen },
 ];
 
 interface LeftNavProps {

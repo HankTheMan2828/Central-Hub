@@ -1,8 +1,8 @@
 # Central Hub
 
-> **Alpha, v0.2.0.** Things will break. Thanks for being an early tester. File bugs in [Issues](https://github.com/HankTheMan2828/Central-Hub/issues).
+> **Alpha, v0.2.1.** Things will break. Thanks for being an early tester. File bugs in [Issues](https://github.com/HankTheMan2828/Central-Hub/issues).
 
-One desktop app for the things you actually do: chat with AI, draft documents, run AI-assisted research, practice typing, and ship code with an autonomous coding agent. All in one window, themed how you like, updating itself in the background.
+One desktop app for the things you actually do: chat with AI, draft documents, run AI-assisted research, keep notes, practice typing, and ship code with an autonomous coding agent. All in one window, themed how you like, updating itself in the background.
 
 **[⬇ Download for Windows](https://github.com/HankTheMan2828/Central-Hub/releases/latest/download/CentralHub-Setup.exe)**
 
@@ -13,7 +13,6 @@ One desktop app for the things you actually do: chat with AI, draft documents, r
 Bones are stable. Expect rough edges. Things to know up front:
 
 - **You need an OpenRouter API key** for the AI chat and coding agent to work. Configure it under **Menu → Settings → AI Provider**. Without it, the chat panels will sit there looking lonely.
-- **Reg Web** (under "The Web" tab) is a placeholder. The framework is in, the browser isn't wired yet.
 - **Windows only for now.** macOS and Linux builds are underway.
 - **No telemetry.** Nothing leaves your machine except your direct prompts to OpenRouter and (optionally) your searches to Brave, using your own keys.
 
@@ -25,7 +24,9 @@ Bones are stable. Expect rough edges. Things to know up front:
 
 **Docs Area.** A clean writing surface with an AI panel docked beside it. Highlight, ask, edit, save. Word document import and export. No copy-pasting between apps.
 
-**The Web.** AI Search for headless research with summarized answers. (Reg Web, a plain browser pane, is coming.)
+**The Web.** AI Search for headless research with summarized answers. Reg Web is a real in-app browser (tabs, bookmarks, history).
+
+**Notes/Files.** Local notes list with search, tags, and quick copy. (Vault-backed Obsidian notes are the next step on this tab.)
 
 **Typing Practice.** WPM tracking and keyboard training.
 

@@ -42,7 +42,7 @@ import { WordTab } from "@/components/tabs/WordTab";
 import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
 import { RegWebTab } from "@/components/tabs/RegWebTab";
-import { SnippetsTab } from "@/components/tabs/SnippetsTab";
+import { NotesTab } from "@/components/tabs/NotesTab";
 import {
   loadDefaultModelPreference,
   saveDefaultModelPreference,
@@ -669,7 +669,7 @@ export default function Home() {
       </div>
     ) : activeNavTab === "search" ? undefined : (
       <div className="h-full min-h-0 box-border flex flex-col p-3">
-        <SnippetsTab />
+        <NotesTab />
       </div>
     );
 
@@ -1408,7 +1408,7 @@ export default function Home() {
       {/*
         Chat columns stay mounted on nav-tab switches so messages,
         attachments, and per-panel state survive a trip through Docs Area /
-        Typing / Search / Snippets and back. `display: contents` keeps
+        Typing / Search / Notes and back. `display: contents` keeps
         the wrapper invisible to flex layout when active; `display:
         none` fully hides while preserving the React subtree.
       */}
@@ -1928,7 +1928,7 @@ export default function Home() {
       >
         <RegWebTab />
       </div>
-      {activeNavTab === "snippets" && <SnippetsTab />}
+      {activeNavTab === "notes" && <NotesTab />}
       </>
       )}
     </div>
