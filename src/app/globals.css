@@ -1,4 +1,54 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+/* Embedded Grok Build TUI — full-bleed, no web scrollbars.
+   Do NOT force .xterm-screen height:100% — that breaks FitAddon cell
+   metrics and leaves the canvas under-sized (empty band on the right). */
+.grok-xterm-host {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  background: #0c0c0c;
+}
+.grok-xterm-host .xterm {
+  position: absolute !important;
+  inset: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+.grok-xterm-host .xterm-viewport {
+  overflow: hidden !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.grok-xterm-host .xterm-viewport::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+/* Grok TUI flush main: squared cloud so the terminal isn't pill-clipped */
+[data-layout="clouds"] .clouds-main-panel-flush,
+[data-layout="clouds"] .clouds-main-panel.p-0 {
+  background: #0c0c0c;
+  border-radius: 0.25rem; /* match rounded-sm */
+}
+[data-layout="clouds"] .clouds-main-panel-flush .clouds-main-bubble,
+[data-layout="clouds"] .clouds-main-panel-flush .clouds-main-bubble > *,
+[data-layout="clouds"] .clouds-main-panel.p-0 .clouds-main-bubble {
+  background: #0c0c0c;
+  border-radius: 0 !important;
+}
+/* Clouds scrollbar rules must not re-style the TUI viewport */
+[data-layout="clouds"] .clouds-main-bubble .grok-xterm-host ::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
 
 /* ── Theme files ──────────────────────────────────────────────────────
    Each file defines all --ch-* tokens under [data-theme="<id>"].
@@ -133,4 +183,106 @@ body::before {
 .ch-zoom-slider:hover::-moz-range-thumb,
 .ch-zoom-slider:focus::-moz-range-thumb {
   box-shadow: 0 0 0 3px var(--ch-accent-10);
+}
+
+/* ── Notes desktop: rain on glass ─────────────────────────────────── */
+/*
+  Streak = vertical bar, rotated then translated (CSS applies right→left).
+  IMPORTANT: CSS positive rotate leans `/`, but down-right fall needs `\`.
+  --notes-rain-angle is therefore the negated wind angle from JS.
+*/
+@keyframes notes-rain-fall {
+  0% {
+    transform: translate3d(
+        var(--notes-rain-from-x, 0px),
+        var(--notes-rain-from-y, -60px),
+        0
+      )
+      rotate(var(--notes-rain-angle, -15deg));
+    opacity: 0;
+  }
+  5% {
+    opacity: var(--notes-rain-opacity, 0.65);
+  }
+  90% {
+    opacity: var(--notes-rain-opacity, 0.65);
+  }
+  100% {
+    transform: translate3d(
+        var(--notes-rain-to-x, 120px),
+        var(--notes-rain-to-y, 900px),
+        0
+      )
+      rotate(var(--notes-rain-angle, -15deg));
+    opacity: 0;
+  }
+}
+.notes-rain-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.notes-rain-drop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--notes-rain-width, 1.5px);
+  height: var(--notes-rain-len, 48px);
+  margin: 0;
+  border-radius: 9999px;
+  /* Trail at top (aft) → bright head at bottom (leading edge of fall) */
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(210, 230, 255, 0.12) 18%,
+    rgba(220, 235, 255, 0.55) 55%,
+    rgba(235, 245, 255, 0.92) 88%,
+    rgba(255, 255, 255, 0.95) 100%
+  );
+  box-shadow: 0 0 3px rgba(180, 210, 255, 0.35);
+  transform-origin: 50% 50%;
+  animation-name: notes-rain-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+.notes-rain-drop.is-far {
+  filter: blur(0.45px);
+  box-shadow: none;
+}
+.notes-rain-drop.is-near {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(200, 225, 255, 0.2) 15%,
+    rgba(225, 240, 255, 0.7) 50%,
+    rgba(240, 248, 255, 0.98) 90%,
+    #fff 100%
+  );
+  box-shadow:
+    0 0 4px rgba(200, 225, 255, 0.5),
+    0 1px 4px rgba(160, 200, 255, 0.25);
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-rain-drop {
+    animation: none;
+    transform: translate3d(
+        var(--notes-rain-static-x, 0px),
+        var(--notes-rain-static-y, 40%),
+        0
+      )
+      rotate(var(--notes-rain-angle, -15deg));
+    opacity: calc(var(--notes-rain-opacity, 0.65) * 0.55);
+  }
+}
+
+/* Notes desktop window frame — thick enough to mask hard effect clips */
+.notes-desktop-frame {
+  border: 3px solid var(--ch-border);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ch-text) 12%, transparent),
+    inset 0 0 0 4px color-mix(in srgb, var(--ch-bg-base) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--ch-border) 70%, transparent);
 }

@@ -1,6 +1,10 @@
 # CentralHub Frontend — Handoff
 
-Last touched: 2026-04-29. Read this before doing anything in `frontend/`.
+Last touched: 2026-08-05. Read this before doing anything in `frontend/`.
+
+## 2026-08-05 — Alternative AI routing (Grok Build)
+
+Menu **Archive** tab replaced with **Routing**. Default backend remains **PI (OpenRouter)**; opt-in **Grok Build (SuperGrok)** uses the local CLI (`~/.grok/bin/grok.exe`) via SuperGrok OAuth. PI IPC files are untouched. New: `main/grok-bridge.js`, `main/ipc-grok-session.js`, `src/lib/aiRoute.ts`, `src/hooks/useGrokChat.ts`, `src/hooks/useAiChat.ts`. All three AI surfaces (Plain, Coding, Docs AI) switch through `useAiChat`. Clouds right rail hides OpenRouter model/cost chrome when Grok is active. Archive restore UI removed from menu only (helpers remain in CodingAgentPanel).
 
 ## Recently shipped (Phase 1-5 of the Claude-Design refactor)
 

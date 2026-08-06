@@ -25,6 +25,8 @@ app.setAppUserModelId('com.centralhub.app');
 
 const { setMainWindow } = require('./main/shared');
 const { destroyAllSessions } = require('./main/pi-sdk');
+const grokSessionIpc = require('./main/ipc-grok-session');
+const grokPtyIpc = require('./main/ipc-grok-pty');
 const { registerAutoUpdater } = require('./main/updater');
 
 require('./main/ipc-pi-session').register(ipcMain);
@@ -34,6 +36,8 @@ require('./main/ipc-docs').register(ipcMain);
 require('./main/ipc-search').register(ipcMain);
 require('./main/ipc-stt').register(ipcMain);
 require('./main/ipc-regweb').register(ipcMain);
+grokSessionIpc.register(ipcMain);
+grokPtyIpc.register(ipcMain);
 
 /* ------------------------------------------------------------------ */
 /*  Window creation                                                   */
@@ -125,6 +129,8 @@ function createWindow() {
   window.on('closed', () => {
     setMainWindow(null);
     destroyAllSessions();
+    grokSessionIpc.destroyAllSessions();
+    grokPtyIpc.destroyAll();
   });
 }
 

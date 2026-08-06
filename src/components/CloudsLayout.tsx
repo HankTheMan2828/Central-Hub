@@ -19,6 +19,10 @@ interface CloudsLayoutProps {
   rightStackTop?: ReactNode;
   rightStackBottom?: ReactNode;
   mainSize?: "default" | "tall";
+  /** ~25% wider main column / single-cloud cap (e.g. Notes desktop). */
+  mainWide?: boolean;
+  /** Drop main-panel padding so content (e.g. Grok TUI) is edge-to-edge. */
+  mainFlush?: boolean;
   nav: ReactNode;
   onOpenMenu: () => void;
   // Identity string used to drive per-slot crossfades. When this changes,
@@ -59,17 +63,26 @@ function BubblePanel({
   children,
   className = "",
   innerClassName = "",
+  /** Squared panel (e.g. full-bleed Grok TUI) — skips cloud pill radii. */
+  square = false,
 }: {
   children: ReactNode;
   className?: string;
   innerClassName?: string;
+  square?: boolean;
 }) {
   return (
     <section
-      className={`clouds-panel min-h-0 min-w-0 rounded-[3rem] border border-[var(--ch-border)] bg-[var(--ch-bg-base)] overflow-hidden p-4 ${className}`}
+      className={`clouds-panel min-h-0 min-w-0 border border-[var(--ch-border)] bg-[var(--ch-bg-base)] overflow-hidden ${
+        square
+          ? "rounded-sm p-0"
+          : "rounded-[3rem] p-4"
+      } ${className}`}
     >
       <div
-        className={`h-full min-h-0 min-w-0 overflow-hidden rounded-[2.35rem] ${innerClassName}`}
+        className={`h-full min-h-0 min-w-0 overflow-hidden ${
+          square ? "rounded-none" : "rounded-[2.35rem]"
+        } ${innerClassName}`}
       >
         {children}
       </div>
@@ -86,6 +99,8 @@ export function CloudsLayout({
   rightStackTop,
   rightStackBottom,
   mainSize = "default",
+  mainWide = false,
+  mainFlush = false,
   nav,
   onOpenMenu,
   transitionKey = "default",
@@ -101,17 +116,31 @@ export function CloudsLayout({
 
   const gridTemplateColumns = useMemo(() => {
     const side = "minmax(min(220px, 20vw), 0.64fr)";
-    const main = "minmax(min(calc(560px + 4in), 58vw), 2.5fr)";
+    // Full-bleed Grok TUI: let the main column claim the stage width.
+    // mainWide ≈ +25% for Notes desktop (and other single-cloud workspaces).
+    const main = mainFlush
+      ? "minmax(0, 1fr)"
+      : mainWide
+        ? "minmax(min(calc(700px + 5in), 72.5vw), 3.125fr)"
+        : "minmax(min(calc(560px + 4in), 58vw), 2.5fr)";
     return [hasLeft ? side : null, main, hasRight ? side : null]
       .filter(Boolean)
       .join(" ");
-  }, [hasLeft, hasRight]);
+  }, [hasLeft, hasRight, mainFlush, mainWide]);
 
   const clusterMaxWidth = useMemo(() => {
-    if (visibleSideCount === 2) return "calc(1840px + 4in)";
-    if (visibleSideCount === 1) return "calc(1380px + 4in)";
-    return "calc(1040px + 4in)";
-  }, [visibleSideCount]);
+    // Squared Grok coding cloud: use nearly the full stage, not the narrow
+    // single-cloud cap (1040px+4in) that left empty gutter around the TUI.
+    if (mainFlush) return "min(1680px, calc(100vw - 4rem))";
+    if (visibleSideCount === 2) {
+      return mainWide ? "calc(2300px + 5in)" : "calc(1840px + 4in)";
+    }
+    if (visibleSideCount === 1) {
+      return mainWide ? "calc(1725px + 5in)" : "calc(1380px + 4in)";
+    }
+    // Single main cloud: 1040→1300 (+25%)
+    return mainWide ? "calc(1300px + 5in)" : "calc(1040px + 4in)";
+  }, [visibleSideCount, mainFlush, mainWide]);
 
   useEffect(() => {
     if (!navOpen || !menuBubbleRef.current) {
@@ -223,8 +252,15 @@ export function CloudsLayout({
             </div>
           ) : (
             <BubblePanel
-              className="clouds-main-panel rounded-[3.5rem]"
-              innerClassName="clouds-main-bubble flex flex-col rounded-[2.75rem]"
+              square={mainFlush}
+              className={`clouds-main-panel ${
+                mainFlush
+                  ? "clouds-main-panel-flush"
+                  : "rounded-[3.5rem]"
+              }`}
+              innerClassName={`clouds-main-bubble flex flex-col ${
+                mainFlush ? "rounded-none" : "rounded-[2.75rem]"
+              }`}
             >
               <FadeSwap transitionKey={transitionKey}>{main}</FadeSwap>
             </BubblePanel>

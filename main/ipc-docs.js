@@ -26,6 +26,14 @@
 const { app, dialog, shell } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+const { getMainWindow } = require('./shared');
+
+/** Parent window for native dialogs — without this, Windows often hides the picker. */
+function dialogParent() {
+  const win = getMainWindow();
+  if (win && !win.isDestroyed()) return win;
+  return undefined;
+}
 
 const DOC_ID_RE = /__([^\\/]+)\.json$/i;
 const writeQueues = new Map();
@@ -212,41 +220,61 @@ function register(ipcMain) {
     return { ok: true, path: real };
   });
 
-  ipcMain.handle('docs:pick-folder', async (_event, { startPath } = {}) => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select Folder',
-      buttonLabel: 'Select Folder',
+  ipcMain.handle('docs:pick-folder', async (_event, {
+    startPath,
+    title,
+    buttonLabel,
+  } = {}) => {
+    const parent = dialogParent();
+    const opts = {
+      properties: ['openDirectory', 'createDirectory'],
+      title: title || 'Select Folder',
+      buttonLabel: buttonLabel || 'Select Folder',
       defaultPath: startPath || defaultWorkingDir(),
-    });
+    };
+    const result = parent
+      ? await dialog.showOpenDialog(parent, opts)
+      : await dialog.showOpenDialog(opts);
     return { path: result.canceled ? null : result.filePaths[0] || null };
   });
 
-  ipcMain.handle('docs:pick-file', async (_event, { startPath } = {}) => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      title: 'Open Document',
-      buttonLabel: 'Open',
+  ipcMain.handle('docs:pick-file', async (_event, { startPath, multi, filters } = {}) => {
+    const properties = ['openFile'];
+    if (multi) properties.push('multiSelections');
+    const parent = dialogParent();
+    const opts = {
+      properties,
+      title: multi ? 'Add Files' : 'Open Document',
+      buttonLabel: multi ? 'Add' : 'Open',
       defaultPath: startPath || defaultWorkingDir(),
-      filters: [
-        {
-          name: 'Documents',
-          extensions: ['docx', 'md', 'markdown', 'txt', 'rtf', 'html', 'htm', 'json'],
-        },
-        { name: 'Word (.docx)', extensions: ['docx'] },
-        { name: 'Markdown', extensions: ['md', 'markdown'] },
-        { name: 'Text', extensions: ['txt'] },
-        { name: 'Rich Text', extensions: ['rtf'] },
-        { name: 'HTML', extensions: ['html', 'htm'] },
-        { name: 'CentralHub Doc', extensions: ['json'] },
-        { name: 'All files', extensions: ['*'] },
-      ],
-    });
+      filters: Array.isArray(filters) && filters.length
+        ? filters
+        : [
+            {
+              name: 'Documents',
+              extensions: ['docx', 'md', 'markdown', 'txt', 'rtf', 'html', 'htm', 'json'],
+            },
+            { name: 'Word (.docx)', extensions: ['docx'] },
+            { name: 'Markdown', extensions: ['md', 'markdown'] },
+            { name: 'Text', extensions: ['txt'] },
+            { name: 'Rich Text', extensions: ['rtf'] },
+            { name: 'HTML', extensions: ['html', 'htm'] },
+            { name: 'CentralHub Doc', extensions: ['json'] },
+            { name: 'All files', extensions: ['*'] },
+          ],
+    };
+    const result = parent
+      ? await dialog.showOpenDialog(parent, opts)
+      : await dialog.showOpenDialog(opts);
     if (result.canceled || !result.filePaths[0]) {
-      return { path: null, parent: null };
+      return { path: null, parent: null, paths: [] };
     }
     const filePath = result.filePaths[0];
-    return { path: filePath, parent: path.dirname(filePath) };
+    return {
+      path: filePath,
+      parent: path.dirname(filePath),
+      paths: result.filePaths,
+    };
   });
 
   ipcMain.handle('docs:browse', async (_event, { path: dirPath } = {}) => {
@@ -372,6 +400,72 @@ function register(ipcMain) {
       await atomicWriteJson(sidecar, layout);
     });
     return { ok: true };
+  });
+
+  /* ---- plain text / notes desktop helpers ---- */
+
+  ipcMain.handle('docs:pick-save', async (_event, {
+    startPath,
+    defaultName,
+    title,
+    filters,
+  } = {}) => {
+    const parent = dialogParent();
+    const opts = {
+      title: title || 'Save File',
+      defaultPath: startPath
+        ? path.join(startPath, defaultName || 'Untitled.md')
+        : (defaultName || path.join(defaultWorkingDir(), 'Untitled.md')),
+      filters: Array.isArray(filters) && filters.length
+        ? filters
+        : [
+            { name: 'Markdown', extensions: ['md', 'markdown'] },
+            { name: 'Text', extensions: ['txt'] },
+            { name: 'All files', extensions: ['*'] },
+          ],
+    };
+    const result = parent
+      ? await dialog.showSaveDialog(parent, opts)
+      : await dialog.showSaveDialog(opts);
+    if (result.canceled || !result.filePath) {
+      return { path: null };
+    }
+    return { path: result.filePath };
+  });
+
+  ipcMain.handle('docs:write-text', async (_event, { path: filePath, content } = {}) => {
+    if (!filePath || typeof filePath !== 'string') {
+      throw new Error('docs:write-text requires a path');
+    }
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+    const tmp = path.join(
+      dir,
+      `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`
+    );
+    await fs.writeFile(tmp, content == null ? '' : String(content), 'utf8');
+    await fs.rename(tmp, filePath);
+    return { ok: true, path: filePath };
+  });
+
+  ipcMain.handle('docs:copy-file', async (_event, { from, to } = {}) => {
+    if (!from || !to) throw new Error('docs:copy-file requires from and to');
+    await fs.mkdir(path.dirname(to), { recursive: true });
+    await fs.copyFile(from, to);
+    return { ok: true, path: to };
+  });
+
+  ipcMain.handle('docs:mkdir', async (_event, { path: dirPath } = {}) => {
+    if (!dirPath || typeof dirPath !== 'string') {
+      throw new Error('docs:mkdir requires a path');
+    }
+    await fs.mkdir(dirPath, { recursive: true });
+    try {
+      const real = await fs.realpath(dirPath);
+      return { ok: true, path: real };
+    } catch {
+      return { ok: true, path: dirPath };
+    }
   });
 
   ipcMain.handle('docs:migrate', async (_event, { store, backups } = {}) => {

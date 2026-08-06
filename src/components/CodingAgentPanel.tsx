@@ -28,7 +28,8 @@ import {
 } from "lucide-react";
 import { MarkdownContent } from "@/lib/markdown";
 import { AnimatedDropdown } from "@/components/AnimatedDropdown";
-import { usePiChat, type ChatMessage, type PiModel } from "@/hooks/usePiChat";
+import { type ChatMessage, type PiModel } from "@/hooks/usePiChat";
+import { useAiChat, useAiRouteValue } from "@/hooks/useAiChat";
 
 type CodingAgentTheme = "workbench" | "terminal";
 type EffortLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -467,7 +468,7 @@ function saveWorkspaceOrder(workspaceIds: string[]) {
   } catch {}
 }
 
-function loadLastWorkspaceId() {
+export function loadLastWorkspaceId() {
   try {
     if (typeof localStorage === "undefined") return NO_WORKSPACE.id;
     const stored = localStorage.getItem(LAST_WORKSPACE_KEY);
@@ -479,7 +480,7 @@ function loadLastWorkspaceId() {
   return NO_WORKSPACE.id;
 }
 
-function saveLastWorkspaceId(workspaceId: string) {
+export function saveLastWorkspaceId(workspaceId: string) {
   try {
     if (typeof localStorage === "undefined") return;
     localStorage.setItem(LAST_WORKSPACE_KEY, workspaceId);
@@ -628,7 +629,6 @@ function CodingAgentTabPanel({
   onAgentTabCloseCancel,
   onAgentTabTitleChange,
 }: CodingAgentTabPanelProps) {
-  const chat = usePiChat();
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const resumeContextRef = useRef<string | null>(null);
@@ -681,9 +681,18 @@ function CodingAgentTabPanel({
   const selectedSafety =
     SAFETY_LEVELS.find((item) => item.id === safetyLevel) ?? SAFETY_LEVELS[1];
 
+  const aiRoute = useAiRouteValue();
+  const chat = useAiChat({
+    sessionType: "chat",
+    cwd: selectedWorkspace.path || undefined,
+  });
+
   const thinkingModels = useMemo(
-    () => chat.filteredModels.filter((model) => model.reasoning),
-    [chat.filteredModels]
+    () =>
+      aiRoute === "grok-build"
+        ? chat.filteredModels
+        : chat.filteredModels.filter((model) => model.reasoning),
+    [aiRoute, chat.filteredModels]
   );
   const workspaceDropdownOptions = useMemo(
     () =>
@@ -694,15 +703,25 @@ function CodingAgentTabPanel({
     [workspaceOptions]
   );
   const modelDropdownOptions = useMemo<ComposerDropdownOption[]>(
-    () =>
-      thinkingModels.length === 0
+    () => {
+      if (aiRoute === "grok-build") {
+        return [
+          {
+            value: "xai:grok-4.5",
+            label: "Grok 4.5",
+            searchText: "grok 4.5 xai",
+          },
+        ];
+      }
+      return thinkingModels.length === 0
         ? [{ value: "", label: "No thinking models", disabled: true }]
         : thinkingModels.map((model) => ({
             value: modelKey(model),
             label: renderModelName(model),
             searchText: `${model.name} ${model.id} ${model.provider}`,
-          })),
-    [thinkingModels]
+          }));
+    },
+    [aiRoute, thinkingModels]
   );
   const effortDropdownOptions = useMemo(
     () => EFFORTS.map((item) => ({ value: item.id, label: item.label })),
@@ -1188,10 +1207,12 @@ function CodingAgentTabPanel({
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           <div>
             <div className="text-[9px] uppercase tracking-wider opacity-45">
-              Cost
+              {aiRoute === "grok-build" ? "Backend" : "Cost"}
             </div>
             <div className="font-mono tabular-nums">
-              ${(chat.sessionStats?.cost ?? 0).toFixed(3)}
+              {aiRoute === "grok-build"
+                ? "Grok CLI"
+                : `$${(chat.sessionStats?.cost ?? 0).toFixed(3)}`}
             </div>
           </div>
           <div>
@@ -1207,7 +1228,11 @@ function CodingAgentTabPanel({
               Model
             </div>
             <div className="font-mono truncate">
-              {selectedThinkingModel?.name ?? chat.currentModel?.name ?? "None"}
+              {aiRoute === "grok-build"
+                ? "Grok 4.5"
+                : selectedThinkingModel?.name ??
+                  chat.currentModel?.name ??
+                  "None"}
             </div>
           </div>
           <div>

@@ -45,6 +45,9 @@ module.exports = {
     "THIRD_PARTY_NOTICES.md",
     "node_modules/**/*",
   ],
+  asarUnpack: [
+    "node_modules/node-pty/**/*",
+  ],
   win: {
     target: [
       {

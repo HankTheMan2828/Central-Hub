@@ -30,13 +30,13 @@ import {
   Maximize2,
 } from "lucide-react";
 import {
-  usePiChat,
   type ChatMessage,
   type SessionStatsData,
   type ContextUsageData,
   type CurrentModel,
   type PiModel,
 } from "@/hooks/usePiChat";
+import { useAiChat, useAiRouteValue } from "@/hooks/useAiChat";
 import { useSTT } from "@/hooks/useSTT";
 import type { ChatHistoryEntry } from "@/hooks/useChatHistory";
 
@@ -135,7 +135,9 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const chat = usePiChat({ sessionType: "plain" });
+  const aiRoute = useAiRouteValue();
+  const chat = useAiChat({ sessionType: "plain" });
+  const assistantLabel = aiRoute === "grok-build" ? "Grok 4.5" : "PI";
 
   /* For Plain Chat: a single user question can produce multiple tool
    * messages (e.g. the model loops `weather` 5x before answering). The
@@ -792,7 +794,9 @@ export function ChatPanel({
             <div className="clouds-chat-empty flex-1 flex flex-col items-center justify-center gap-2 opacity-30">
               <MessageSquare className="clouds-chat-empty-icon w-10 h-10" />
               <span className="clouds-chat-empty-text text-[11px] uppercase tracking-widest mt-2">
-                {chat.isReady ? "Send a message to start" : "Connecting to PI\u2026"}
+                {chat.isReady
+                  ? "Send a message to start"
+                  : `Connecting to ${assistantLabel}\u2026`}
               </span>
               {!chat.isReady && !chat.initError && (
                 <Loader2 className="w-4 h-4 animate-spin mt-1" />
@@ -869,7 +873,8 @@ export function ChatPanel({
               return (
                 <div key={msg.id} className="flex flex-col gap-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 ml-1">
-                    PI {msg.isStreaming ? "\u2022 responding\u2026" : ""}
+                    {assistantLabel}{" "}
+                    {msg.isStreaming ? "\u2022 responding\u2026" : ""}
                   </span>
                   <div className="clouds-chat-message-bubble border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-4 py-2.5 rounded-sm">
                     {msg.thinking && (

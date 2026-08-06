@@ -1,7 +1,6 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
-  Archive,
   Menu,
   Settings,
   Cpu,
@@ -16,7 +15,7 @@ import {
   Star,
   Palette,
   MessageSquare,
-  Trash2,
+  Route,
   X,
 } from "lucide-react";
 import { useChatTabs } from "@/hooks/useChatTabs";
@@ -30,14 +29,8 @@ import {
   type WebSubTabId,
   type WordSubTabId,
 } from "@/components/LeftNav";
-import {
-  CodingAgentPanel,
-  CODING_WORKSPACES_UPDATED_EVENT,
-  deleteArchivedWorkspace,
-  loadArchivedWorkspaces,
-  restoreArchivedWorkspace,
-  type WorkspaceOption,
-} from "@/components/CodingAgentPanel";
+import { CodingAgentPanel } from "@/components/CodingAgentPanel";
+import { GrokTerminalPanel } from "@/components/GrokTerminalPanel";
 import { WordTab } from "@/components/tabs/WordTab";
 import { TypingTab } from "@/components/tabs/TypingTab";
 import { SearchTab } from "@/components/tabs/SearchTab";
@@ -56,11 +49,23 @@ import {
 } from "@/components/ThemeProvider";
 import { CloudsLayout } from "@/components/CloudsLayout";
 import { AnimatedDropdown } from "@/components/AnimatedDropdown";
+import {
+  AI_ROUTE_CHANGED_EVENT,
+  aiRouteLabel,
+  loadAiRoute,
+  saveAiRoute,
+  type AiRoute,
+} from "@/lib/aiRoute";
 
 type IpcInvokeResult = {
   success?: boolean;
   error?: string;
   configured?: boolean;
+  installed?: boolean;
+  authenticated?: boolean;
+  version?: string | null;
+  binaryPath?: string | null;
+  authMode?: string | null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -81,15 +86,24 @@ export default function Home() {
 
   /* ---- menu state ---- */
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuTab, setMenuTab] = useState<"themes" | "settings" | "archive">("themes");
+  const [menuTab, setMenuTab] = useState<"themes" | "settings" | "routing">(
+    "themes"
+  );
   const [agentSpace, setAgentSpace] = useState<"workbench" | "terminal">("workbench");
   const [defaultModel, setDefaultModel] =
     useState<StoredModelPreference | null>(() => loadDefaultModelPreference());
-  const [archivedWorkspaces, setArchivedWorkspaces] =
-    useState<WorkspaceOption[]>(loadArchivedWorkspaces);
-  const [confirmArchiveDelete, setConfirmArchiveDelete] = useState<string | null>(
-    null
-  );
+  // Default "pi" on server + first paint; hydrate from localStorage in effect
+  // so SSR text ("Connecting to PI…") matches the client first render.
+  const [aiRoute, setAiRoute] = useState<AiRoute>("pi");
+  const [grokStatus, setGrokStatus] = useState<{
+    installed: boolean;
+    authenticated: boolean;
+    version: string | null;
+    binaryPath: string | null;
+    authMode: string | null;
+    error?: string;
+  } | null>(null);
+  const [grokStatusLoading, setGrokStatusLoading] = useState(false);
 
   /* ---- API key state ---- */
   const [openRouterKey, setOpenRouterKey] = useState("");
@@ -117,11 +131,12 @@ export default function Home() {
   const [wordSubTab, setWordSubTab] = useState<WordSubTabId>("saves");
   const [webSubTab, setWebSubTab] = useState<WebSubTabId>("ai");
 
-  // We need a shared chat reference for the settings panel (model selector, API keys)
-  // The first tab's chat instance serves as the "global" reference for settings.
-  // Model changes broadcast to all sessions via pi:broadcast-model.
+  // Shared PI chat reference for Settings (model selector / OpenRouter key).
+  // Only active on the PI route — Grok does not use OpenRouter models.
   const sharedChat = usePiChat({
-    disabled: chatSubTab !== "plain" && !(menuOpen && menuTab === "settings"),
+    disabled:
+      aiRoute !== "pi" ||
+      (chatSubTab !== "plain" && !(menuOpen && menuTab === "settings")),
   });
 
   /* ---- Metrics from the active chat tab (for right column) ---- */
@@ -162,40 +177,80 @@ export default function Home() {
     [activeMetrics?.hasMessages, addTab, canAdd]
   );
 
-  const refreshArchivedWorkspaces = useCallback(() => {
-    setArchivedWorkspaces(loadArchivedWorkspaces());
+  const refreshGrokStatus = useCallback(async () => {
+    setGrokStatusLoading(true);
+    try {
+      if (typeof window === "undefined") {
+        setGrokStatus({
+          installed: false,
+          authenticated: false,
+          version: null,
+          binaryPath: null,
+          authMode: null,
+          error: "Not in Electron",
+        });
+        return;
+      }
+      const electron = (0, eval)("require")("electron") as {
+        ipcRenderer: {
+          invoke: (c: string, ...a: unknown[]) => Promise<IpcInvokeResult>;
+        };
+      };
+      const res = await electron.ipcRenderer.invoke("grok:status");
+      if (res?.success === false) {
+        setGrokStatus({
+          installed: false,
+          authenticated: false,
+          version: null,
+          binaryPath: null,
+          authMode: null,
+          error: res.error || "Status check failed",
+        });
+      } else {
+        setGrokStatus({
+          installed: !!res?.installed,
+          authenticated: !!res?.authenticated,
+          version: res?.version ?? null,
+          binaryPath: res?.binaryPath ?? null,
+          authMode: res?.authMode ?? null,
+        });
+      }
+    } catch (e) {
+      setGrokStatus({
+        installed: false,
+        authenticated: false,
+        version: null,
+        binaryPath: null,
+        authMode: null,
+        error: String(e),
+      });
+    } finally {
+      setGrokStatusLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    window.addEventListener(
-      CODING_WORKSPACES_UPDATED_EVENT,
-      refreshArchivedWorkspaces
-    );
-    return () => {
-      window.removeEventListener(
-        CODING_WORKSPACES_UPDATED_EVENT,
-        refreshArchivedWorkspaces
-      );
-    };
-  }, [refreshArchivedWorkspaces]);
+    // Match useAiRouteValue: load persisted route after mount only.
+    setAiRoute(loadAiRoute());
+    const sync = () => setAiRoute(loadAiRoute());
+    window.addEventListener(AI_ROUTE_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(AI_ROUTE_CHANGED_EVENT, sync);
+  }, []);
 
-  const handleRestoreArchivedWorkspace = useCallback(
-    (workspace: WorkspaceOption) => {
-      restoreArchivedWorkspace(workspace);
-      setConfirmArchiveDelete(null);
-      refreshArchivedWorkspaces();
-    },
-    [refreshArchivedWorkspaces]
-  );
+  useEffect(() => {
+    if (menuOpen && menuTab === "routing") {
+      refreshGrokStatus();
+    }
+  }, [menuOpen, menuTab, refreshGrokStatus]);
 
-  const handleDeleteArchivedWorkspace = useCallback(
-    (workspaceId: string) => {
-      deleteArchivedWorkspace(workspaceId);
-      setConfirmArchiveDelete(null);
-      refreshArchivedWorkspaces();
-    },
-    [refreshArchivedWorkspaces]
-  );
+  const handleAiRouteChange = useCallback((route: AiRoute) => {
+    setAiRoute(route);
+    saveAiRoute(route);
+    if (route === "grok-build") {
+      // Status refresh is handled when Routing tab is open; force one here.
+      // (localStorage + event already fire from saveAiRoute)
+    }
+  }, []);
 
   /* ---- handlers ---- */
   const handleSaveApiKey = useCallback(async () => {
@@ -336,7 +391,141 @@ export default function Home() {
     </div>
   );
 
-  const chatRightContent = (
+  const chatRightContentGrok = (
+    <div className="clouds-chat-right-rail h-full min-h-0 box-border overflow-y-auto flex flex-col gap-4 p-3">
+      <div>
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
+          <Route className="w-3.5 h-3.5" />
+          Backend
+        </div>
+        <div className="border border-[var(--ch-border)] bg-[var(--ch-bg-base)] px-3 py-2 rounded-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                activeMetrics?.isReady
+                  ? "bg-[var(--ch-success)]"
+                  : "bg-[var(--ch-text-faint)]"
+              }`}
+            />
+            <span className="text-[12px] truncate font-mono">
+              {activeMetrics?.currentModel?.name || "Grok 4.5"}
+            </span>
+          </div>
+          <p className="mt-2 text-[10px] text-[var(--ch-text-faint)] leading-relaxed">
+            SuperGrok Grok Build uses Grok 4.5 for Plain Chat, Coding Agent,
+            and Docs AI (only model currently listed by the CLI). OpenRouter
+            model list and cost rails are hidden on this route. Change backend
+            under Menu → Routing.
+          </p>
+        </div>
+      </div>
+
+      {activeMetrics?.sessionStats && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-3 opacity-60">
+            Session Tokens
+          </div>
+          <div className="clouds-metric-card border border-[var(--ch-border-subtle)] rounded-sm bg-[var(--ch-bg-inset)] px-3 py-2.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] uppercase tracking-wider opacity-35">
+                Total
+              </span>
+              <span className="text-[11px] font-mono tabular-nums opacity-70 font-bold">
+                {activeMetrics.sessionStats.tokens.total}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-col min-h-0 flex-1">
+        <div className="flex items-center mb-2 shrink-0">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60">
+            <Clock className="w-3.5 h-3.5" />
+            History
+          </div>
+        </div>
+        <div className="clouds-history-list flex-1 min-h-0 overflow-y-auto flex flex-col gap-1">
+          {history.length === 0 && (
+            <p className="text-[11px] opacity-20 italic">No past chats yet.</p>
+          )}
+          {history.map((entry) => (
+            <div
+              key={entry.id}
+              className="clouds-history-card w-full text-left px-2.5 py-2 border border-[var(--ch-border-subtle)] rounded-sm hover:bg-white/[0.04] hover:border-[var(--ch-border)] group"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-3 h-3 opacity-30 shrink-0" />
+                <span className="text-[11px] truncate flex-1">
+                  {entry.title}
+                </span>
+                {confirmHistoryDelete !== entry.id && (
+                  <button
+                    className="opacity-0 group-hover:opacity-40 hover:!opacity-80 hover:text-[var(--ch-error)] shrink-0"
+                    onClick={() => setConfirmHistoryDelete(entry.id)}
+                    title="Delete"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              {confirmHistoryDelete === entry.id && (
+                <div className="flex items-center gap-2 mt-1 ml-5">
+                  <span className="text-[9px] text-[var(--ch-error-text)]">
+                    Delete?
+                  </span>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm"
+                    onClick={() => {
+                      removeEntry(entry.id);
+                      setConfirmHistoryDelete(null);
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm"
+                    onClick={() => setConfirmHistoryDelete(null)}
+                  >
+                    No
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-between mt-1 ml-5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] opacity-25 font-mono">
+                    {new Date(entry.timestamp).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                  <span className="text-[9px] opacity-20">
+                    {entry.messageCount} msgs
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100">
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm"
+                    onClick={() => setHistoryPreview(entry)}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider border border-[var(--ch-success)] text-[var(--ch-success)] hover:bg-[var(--ch-success)]/10 rounded-sm"
+                    onClick={() => handleResumeHistory(entry)}
+                  >
+                    Resume
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const chatRightContentPi = (
     <div className="clouds-chat-right-rail h-full min-h-0 box-border overflow-y-auto flex flex-col gap-4 p-3">
       <div>
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider opacity-60 mb-3">
@@ -639,9 +828,21 @@ export default function Home() {
     </div>
   );
 
+  const chatRightContent =
+    aiRoute === "grok-build" ? chatRightContentGrok : chatRightContentPi;
+
+  const isGrokCoding =
+    aiRoute === "grok-build" &&
+    activeNavTab === "chat" &&
+    chatSubTab === "coding";
+
   const cloudsMainContent =
     activeNavTab === "chat" && chatSubTab === "plain" ? (
       chatMainContent
+    ) : isGrokCoding ? (
+      <div className="h-full w-full min-h-0 min-w-0 box-border flex flex-col">
+        <GrokTerminalPanel />
+      </div>
     ) : activeNavTab === "chat" && chatSubTab === "coding" ? (
       <div className="h-full min-h-0 box-border flex gap-2 p-3">
         <CodingAgentPanel
@@ -668,7 +869,7 @@ export default function Home() {
         <RegWebTab sidePortalId="clouds-regweb-side-slot" />
       </div>
     ) : activeNavTab === "search" ? undefined : (
-      <div className="h-full min-h-0 box-border flex flex-col p-3">
+      <div className="h-full min-h-0 box-border flex flex-col p-2">
         <NotesTab />
       </div>
     );
@@ -720,8 +921,9 @@ export default function Home() {
       />
     ) : undefined;
 
+  // Grok coding is a single full-width terminal cloud — no info/workspace rails.
   const cloudsRightStackTop =
-    activeNavTab === "chat" && chatSubTab === "coding" ? (
+    activeNavTab === "chat" && chatSubTab === "coding" && !isGrokCoding ? (
       <div
         id="clouds-coding-info-slot"
         className="h-full min-h-0 box-border p-3"
@@ -729,7 +931,7 @@ export default function Home() {
     ) : undefined;
 
   const cloudsRightStackBottom =
-    activeNavTab === "chat" && chatSubTab === "coding" ? (
+    activeNavTab === "chat" && chatSubTab === "coding" && !isGrokCoding ? (
       <div
         id="clouds-coding-workspaces-slot"
         className="h-full min-h-0 box-border p-3"
@@ -795,14 +997,14 @@ export default function Home() {
                 </button>
                 <button
                   className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors ${
-                    menuTab === "archive"
+                    menuTab === "routing"
                       ? "bg-white/[0.04] text-[var(--ch-text)]"
                       : "text-[var(--ch-text-muted)] hover:text-[var(--ch-text)]"
                   }`}
-                  onClick={() => setMenuTab("archive")}
+                  onClick={() => setMenuTab("routing")}
                 >
-                  <Archive className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
-                  Archive
+                  <Route className="w-3.5 h-3.5 inline-block mr-2 -mt-0.5" />
+                  Routing
                 </button>
               </div>
 
@@ -1275,81 +1477,155 @@ export default function Home() {
                   </div>
                 )}
 
-                {menuTab === "archive" && (
+                {menuTab === "routing" && (
                   <div className="flex flex-col gap-6">
                     <section>
                       <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35 mb-3">
-                        <Archive className="w-3.5 h-3.5" />
-                        Archived Workspaces
+                        <Route className="w-3.5 h-3.5" />
+                        AI Backend
                       </h3>
-                      {archivedWorkspaces.length === 0 ? (
-                        <p className="text-[12px] opacity-25 italic">
-                          No archived workspaces.
-                        </p>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          {archivedWorkspaces.map((workspace) => (
-                            <div
-                              key={workspace.id}
-                              className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm p-3"
+                      <p className="text-[11px] text-[var(--ch-text-muted)] mb-3 leading-relaxed">
+                        Choose how Plain Chat, Coding Agent, and Docs AI are
+                        powered. PI keeps the existing OpenRouter path. Grok
+                        Build uses your local SuperGrok-logged CLI.
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {(
+                          [
+                            {
+                              id: "pi" as const,
+                              label: "PI (OpenRouter)",
+                              desc: "Existing connectors. Models and keys in Settings.",
+                            },
+                            {
+                              id: "grok-build" as const,
+                              label: "Grok Build (SuperGrok)",
+                              desc: "Local Grok Build CLI. Auth via grok login / SuperGrok OAuth.",
+                            },
+                          ] as const
+                        ).map((opt) => {
+                          const isActive = aiRoute === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => handleAiRouteChange(opt.id)}
+                              className={`w-full flex items-start gap-3 px-3 py-2.5 border rounded-sm text-left transition-colors ${
+                                isActive
+                                  ? "border-[var(--ch-accent)] bg-[var(--ch-accent-5)]"
+                                  : "border-[var(--ch-border-subtle)] hover:border-[#FFB347]/40 hover:bg-white/[0.02]"
+                              }`}
                             >
-                              <div className="flex items-start gap-3">
-                                <Archive className="w-3.5 h-3.5 mt-0.5 text-[var(--ch-text-faint)] shrink-0" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-[12px] font-mono text-[var(--ch-text)] truncate">
-                                    {workspace.name}
-                                  </div>
-                                  <div className="mt-0.5 text-[10px] font-mono text-[var(--ch-text-faint)] truncate">
-                                    {workspace.path}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRestoreArchivedWorkspace(workspace)}
-                                  className="h-[26px] px-2 flex items-center gap-1.5 border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--ch-success)] hover:border-[var(--ch-success)] rounded-sm transition-colors shrink-0"
-                                  title={`Restore ${workspace.name}`}
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
+                                  isActive
+                                    ? "bg-[var(--ch-accent)]"
+                                    : "bg-[var(--ch-border)]"
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className={`text-[12px] font-mono ${
+                                    isActive
+                                      ? "text-[var(--ch-accent)]"
+                                      : "text-[var(--ch-text)]"
+                                  }`}
                                 >
-                                  <Check className="w-3 h-3" />
-                                  <span className="text-[10px] uppercase tracking-wider">
-                                    Restore
-                                  </span>
-                                </button>
-                                {confirmArchiveDelete !== workspace.id && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmArchiveDelete(workspace.id)}
-                                    className="h-[26px] w-[26px] flex items-center justify-center border border-[var(--ch-border-subtle)] text-[var(--ch-text-muted)] hover:text-[var(--ch-error)] hover:border-[var(--ch-error)] rounded-sm transition-colors shrink-0"
-                                    title={`Delete ${workspace.name}`}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                              {confirmArchiveDelete === workspace.id && (
-                                <div className="mt-2 flex items-center gap-1.5 text-[10px]">
-                                  <span className="text-[var(--ch-error-text)]">
-                                    Delete workspace and chats?
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteArchivedWorkspace(workspace.id)}
-                                    className="px-1.5 py-0.5 border border-[var(--ch-error)] text-[var(--ch-error)] hover:bg-[var(--ch-error)]/10 rounded-sm uppercase tracking-wider transition-colors"
-                                  >
-                                    Yes
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmArchiveDelete(null)}
-                                    className="px-1.5 py-0.5 border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm uppercase tracking-wider transition-colors"
-                                  >
-                                    No
-                                  </button>
+                                  {opt.label}
                                 </div>
+                                <div className="mt-0.5 text-[10px] text-[var(--ch-text-faint)] leading-snug">
+                                  {opt.desc}
+                                </div>
+                              </div>
+                              {isActive && (
+                                <Check className="w-3.5 h-3.5 text-[var(--ch-success)] shrink-0 mt-0.5" />
                               )}
-                            </div>
-                          ))}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    <section>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] opacity-35">
+                          <Cpu className="w-3.5 h-3.5" />
+                          Grok Build Status
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => refreshGrokStatus()}
+                          disabled={grokStatusLoading}
+                          className="px-2 py-0.5 text-[10px] uppercase tracking-wider border border-[var(--ch-border)] text-[var(--ch-text-muted)] hover:bg-white/[0.06] rounded-sm disabled:opacity-40"
+                        >
+                          {grokStatusLoading ? "Checking…" : "Refresh"}
+                        </button>
+                      </div>
+                      <div className="border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] rounded-sm p-3 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              grokStatus?.installed
+                                ? "bg-[var(--ch-success)]"
+                                : "bg-[var(--ch-text-faint)]"
+                            }`}
+                          />
+                          <span className="opacity-60">Installed</span>
+                          <span className="ml-auto font-mono opacity-80">
+                            {grokStatusLoading
+                              ? "…"
+                              : grokStatus?.installed
+                                ? grokStatus.version || "yes"
+                                : "no"}
+                          </span>
                         </div>
-                      )}
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              grokStatus?.authenticated
+                                ? "bg-[var(--ch-success)]"
+                                : "bg-[var(--ch-text-faint)]"
+                            }`}
+                          />
+                          <span className="opacity-60">SuperGrok auth</span>
+                          <span className="ml-auto font-mono opacity-80">
+                            {grokStatusLoading
+                              ? "…"
+                              : grokStatus?.authenticated
+                                ? grokStatus.authMode || "yes"
+                                : "not logged in"}
+                          </span>
+                        </div>
+                        {grokStatus?.binaryPath && (
+                          <div className="text-[10px] font-mono text-[var(--ch-text-faint)] truncate pt-1 border-t border-[var(--ch-border-faint)]">
+                            {grokStatus.binaryPath}
+                          </div>
+                        )}
+                        {grokStatus?.error && (
+                          <div className="text-[10px] text-[var(--ch-error-text)]">
+                            {grokStatus.error}
+                          </div>
+                        )}
+                        {(!grokStatus?.installed ||
+                          !grokStatus?.authenticated) && (
+                          <p className="text-[10px] text-[var(--ch-text-muted)] leading-relaxed pt-1">
+                            Install Grok Build, then run{" "}
+                            <span className="font-mono text-[var(--ch-text)]">
+                              grok login
+                            </span>{" "}
+                            in a terminal. Central Hub uses the same SuperGrok
+                            OAuth session (no separate API key required).
+                          </p>
+                        )}
+                        {aiRoute === "grok-build" &&
+                          grokStatus?.installed &&
+                          grokStatus?.authenticated && (
+                            <p className="text-[10px] text-[var(--ch-success)] pt-1">
+                              Active route: {aiRouteLabel("grok-build")}. AI
+                              clouds will hide OpenRouter model pickers.
+                            </p>
+                          )}
+                      </div>
                     </section>
                   </div>
                 )}
@@ -1370,11 +1646,15 @@ export default function Home() {
           rightStackTop={cloudsRightStackTop}
           rightStackBottom={cloudsRightStackBottom}
           mainSize={
-            activeNavTab === "word" || activeNavTab === "search"
+            activeNavTab === "word" ||
+            activeNavTab === "search" ||
+            activeNavTab === "notes"
               ? "tall"
               : "default"
           }
-          transitionKey={`${activeNavTab}:${chatSubTab}:${webSubTab}:${wordSubTab}`}
+          mainWide={activeNavTab === "notes"}
+          mainFlush={isGrokCoding}
+          transitionKey={`${activeNavTab}:${chatSubTab}:${webSubTab}:${wordSubTab}:${aiRoute}`}
           onOpenMenu={openSettingsMenu}
         />
       ) : (
@@ -1809,12 +2089,29 @@ export default function Home() {
       <div
         style={{
           display:
-            activeNavTab === "chat" && chatSubTab === "coding"
+            activeNavTab === "chat" &&
+            chatSubTab === "coding" &&
+            aiRoute !== "grok-build"
               ? "contents"
               : "none",
         }}
       >
         <CodingAgentPanel theme="workbench" />
+      </div>
+
+      <div
+        style={{
+          display:
+            activeNavTab === "chat" &&
+            chatSubTab === "coding" &&
+            aiRoute === "grok-build"
+              ? "contents"
+              : "none",
+        }}
+      >
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-[#0c0c0c] rounded-sm">
+          <GrokTerminalPanel />
+        </div>
       </div>
 
       {historyPreview && (

@@ -788,15 +788,29 @@ export function WordTab({
   const handleApplyDoc = useCallback(
     (html: string) => {
       const editor = editorRef.current;
+      if (!editor) return;
       const doc = activeDocRef.current;
-      if (!editor || !doc) return;
-      if (doc.html.trim()) {
+      // Apply even if no active doc yet so Edit mode still updates the page.
+      if (doc?.html.trim()) {
         rememberBackup(doc, "before-ai-edit").catch(() => {});
       }
       editor.innerHTML = html;
+      // Keep in-memory doc in sync immediately (don't wait for debounced save).
+      if (doc) {
+        const updated: WordDoc = {
+          ...doc,
+          html,
+          snippet: htmlToSnippet(html),
+          updatedAt: Date.now(),
+        };
+        activeDocRef.current = updated;
+        setActiveDoc(updated);
+      }
       editor.dispatchEvent(new InputEvent("input", { bubbles: true }));
       refreshStats();
-      flushSave().catch(() => {});
+      if (doc && activeDocPathRef.current && !activeDocTransientRef.current) {
+        flushSave().catch(() => {});
+      }
       pushWordDocToMain(htmlToMarkdown(editor)).catch(() => {});
     },
     [flushSave, refreshStats, rememberBackup]

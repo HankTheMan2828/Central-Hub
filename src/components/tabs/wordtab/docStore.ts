@@ -63,11 +63,29 @@ export async function setWorkingDir(path: string): Promise<void> {
   }
 }
 
-export async function pickFolder(startPath?: string): Promise<string | null> {
+export async function pickFolder(
+  startPathOrOpts?:
+    | string
+    | {
+        startPath?: string;
+        title?: string;
+        buttonLabel?: string;
+        /** Default true for Docs Area; notes should pass false. */
+        updateWorkingDir?: boolean;
+      }
+): Promise<string | null> {
+  const opts =
+    typeof startPathOrOpts === "string" || startPathOrOpts == null
+      ? { startPath: startPathOrOpts, updateWorkingDir: true }
+      : startPathOrOpts;
   const result = await invoke<{ path: string | null }>("docs:pick-folder", {
-    startPath,
+    startPath: opts.startPath,
+    title: opts.title,
+    buttonLabel: opts.buttonLabel,
   });
-  if (result.path) await setWorkingDir(result.path);
+  if (result.path && opts.updateWorkingDir !== false) {
+    await setWorkingDir(result.path);
+  }
   return result.path;
 }
 
@@ -80,6 +98,61 @@ export async function pickFile(
   );
   if (!result.path || !result.parent) return null;
   return { path: result.path, parent: result.parent };
+}
+
+/** Multi-select file picker (notes desktop, etc.). */
+export async function pickFiles(options?: {
+  startPath?: string;
+  filters?: { name: string; extensions: string[] }[];
+}): Promise<string[]> {
+  const result = await invoke<{
+    path: string | null;
+    paths?: string[];
+  }>("docs:pick-file", {
+    startPath: options?.startPath,
+    multi: true,
+    filters: options?.filters,
+  });
+  if (Array.isArray(result.paths) && result.paths.length) return result.paths;
+  if (result.path) return [result.path];
+  return [];
+}
+
+export async function pickSavePath(options?: {
+  startPath?: string;
+  defaultName?: string;
+  title?: string;
+  filters?: { name: string; extensions: string[] }[];
+}): Promise<string | null> {
+  const result = await invoke<{ path: string | null }>("docs:pick-save", {
+    startPath: options?.startPath,
+    defaultName: options?.defaultName,
+    title: options?.title,
+    filters: options?.filters,
+  });
+  return result.path || null;
+}
+
+export async function writeFileText(
+  path: string,
+  content: string
+): Promise<void> {
+  await invoke("docs:write-text", { path, content });
+}
+
+export async function copyFile(from: string, to: string): Promise<string> {
+  const result = await invoke<{ ok: true; path: string }>("docs:copy-file", {
+    from,
+    to,
+  });
+  return result.path;
+}
+
+export async function makeDir(path: string): Promise<string> {
+  const result = await invoke<{ ok: true; path: string }>("docs:mkdir", {
+    path,
+  });
+  return result.path;
 }
 
 export async function readFileText(path: string): Promise<string> {

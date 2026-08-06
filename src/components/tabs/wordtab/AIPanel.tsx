@@ -21,7 +21,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { usePiChat } from "@/hooks/usePiChat";
+import { useAiChat, useAiRouteValue } from "@/hooks/useAiChat";
 import { MarkdownContent } from "@/lib/markdown";
 import { AnimatedDropdown } from "@/components/AnimatedDropdown";
 import { htmlToMarkdown } from "./exporters";
@@ -52,6 +52,71 @@ async function pushWordModeToMain(mode: "read" | "edit"): Promise<void> {
   }
 }
 
+/**
+ * Pull a revised document out of an assistant reply.
+ * Supports <<<DOC...>>> markers and fenced ```markdown / ```md / bare ``` blocks.
+ */
+function extractRevisedDocument(content: string): string | null {
+  const text = content?.trim();
+  if (!text) return null;
+
+  const marker = /<<<DOC\s*([\s\S]*?)\s*>>>/i.exec(text);
+  if (marker?.[1]?.trim()) return marker[1].trim();
+
+  // Incomplete stream: open <<<DOC without closing >>> yet
+  const openMarker = /<<<DOC\s*([\s\S]*)$/i.exec(text);
+  if (openMarker?.[1]?.trim() && !/>>>/.test(text.slice(text.indexOf("<<<DOC")))) {
+    // Only treat as doc body if it looks substantial (still streaming)
+    const partial = openMarker[1].trim();
+    if (partial.length >= 8) return partial;
+  }
+
+  const fences = [
+    ...text.matchAll(/```(?:markdown|md|document)?\s*\r?\n([\s\S]*?)```/gi),
+  ];
+  if (fences.length > 0) {
+    let best = "";
+    for (const m of fences) {
+      const body = (m[1] || "").trim();
+      if (body.length > best.length) best = body;
+    }
+    // Ignore tiny fences (inline examples); real docs are longer.
+    if (best.length >= 8) return best;
+  }
+
+  // Incomplete fenced stream: ```markdown ... (no close yet)
+  const openFence =
+    /```(?:markdown|md|document)?\s*\r?\n([\s\S]*)$/i.exec(text);
+  if (openFence?.[1]?.trim() && !text.trimEnd().endsWith("```")) {
+    const partial = openFence[1].trim();
+    if (partial.length >= 8) return partial;
+  }
+
+  return null;
+}
+
+/**
+ * Remove document payloads from chat display.
+ * Keeps normal conversational replies; only hides machine document blocks.
+ */
+function stripDocumentPayload(content: string): string {
+  if (!content) return "";
+  let out = content;
+  // Closed markers
+  out = out.replace(/<<<DOC\s*[\s\S]*?\s*>>>/gi, "");
+  // Open marker still streaming
+  out = out.replace(/<<<DOC\s*[\s\S]*$/gi, "");
+  // Closed fences meant as the document body
+  out = out.replace(/```(?:markdown|md|document)\s*\r?\n[\s\S]*?```/gi, "");
+  // Long bare fences (likely full doc dumps, not tiny code samples)
+  out = out.replace(/```\s*\r?\n([\s\S]*?)```/g, (full, body: string) =>
+    (body || "").trim().length >= 80 ? "" : full
+  );
+  // Open fence still streaming (markdown/md/document tags only)
+  out = out.replace(/```(?:markdown|md|document)\s*\r?\n[\s\S]*$/gi, "");
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 type Mode = "read" | "edit";
 
 export type AIPanelHandle = {
@@ -68,7 +133,8 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
   { getEditor, onApplyDoc },
   ref
 ) {
-  const chat = usePiChat({ sessionType: "word" });
+  const aiRoute = useAiRouteValue();
+  const chat = useAiChat({ sessionType: "word" });
 
   useImperativeHandle(
     ref,
@@ -90,6 +156,8 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
   const [modelSearch, setModelSearch] = useState("");
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const [confirmNewChat, setConfirmNewChat] = useState(false);
+  const wasStreamingRef = useRef(false);
+  const [lastAppliedMsgId, setLastAppliedMsgId] = useState<string | null>(null);
 
   // Auto-scroll on new messages.
   useEffect(() => {
@@ -97,16 +165,15 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
     if (el) el.scrollTop = el.scrollHeight;
   }, [chat.messages, chat.isStreaming]);
 
-  // Sync mode to main. Runs on mount and on every toggle. word_edit
-  // refuses to run while in read mode, gating the capability at the
-  // tool layer rather than just nudging via prompt.
+  // Always sync mode to main so PI word_edit is gated correctly.
+  // (No-op / non-fatal if not on PI or IPC unavailable.)
   useEffect(() => {
     pushWordModeToMain(mode);
   }, [mode]);
 
-  // Subscribe to word_edit tool results from main. The AI calls word_edit,
-  // main updates wordDocCache and fires pi:word-doc-edit; we apply the new
-  // markdown to the live editor here.
+  // Subscribe to word_edit tool results from main (PI applies via IPC).
+  // Keep listener always registered so late PI turns still apply after
+  // route flickers during hydration.
   useEffect(() => {
     if (typeof window === "undefined") return;
     let ipcRenderer: {
@@ -133,35 +200,122 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
     };
   }, [onApplyDoc]);
 
+  const applyExtractedDoc = useCallback(
+    (markdown: string, sourceMsgId?: string, force = false) => {
+      const body = markdown.trim();
+      if (!body) return false;
+      if (!force && sourceMsgId && lastAppliedMsgId === sourceMsgId) {
+        return false;
+      }
+      onApplyDoc(markdownToHtml(body));
+      if (sourceMsgId) setLastAppliedMsgId(sourceMsgId);
+      return true;
+    },
+    [lastAppliedMsgId, onApplyDoc]
+  );
+
+  // After a turn finishes in Edit mode, apply any full document the model
+  // returned (Grok has no word_edit tool; PI may also dump a fence if the
+  // tool wasn't used). Skip if this turn already applied via word_edit.
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = chat.isStreaming;
+    if (!wasStreaming || chat.isStreaming) return;
+    if (mode !== "edit") return;
+
+    const msgs = chat.messages;
+    // Prefer the last non-empty assistant message.
+    let lastAsst: (typeof msgs)[number] | null = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "assistant" && msgs[i].content?.trim()) {
+        lastAsst = msgs[i];
+        break;
+      }
+    }
+    if (!lastAsst) return;
+
+    // If PI already ran a successful word_edit this turn, don't re-apply
+    // a chat fence on top (could be a short example).
+    let sawUser = false;
+    let wordEditOk = false;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role === "user") {
+        sawUser = true;
+        break;
+      }
+      if (
+        m.role === "tool" &&
+        m.toolName === "word_edit" &&
+        m.content &&
+        !m.isToolError
+      ) {
+        wordEditOk = true;
+      }
+    }
+    if (wordEditOk && sawUser && aiRoute === "pi") return;
+
+    // Only apply explicit document payloads (markers / doc fences) — never
+    // treat a normal conversational reply as the document body.
+    const extracted = extractRevisedDocument(lastAsst.content);
+    if (extracted) applyExtractedDoc(extracted, lastAsst.id);
+  }, [aiRoute, applyExtractedDoc, chat.isStreaming, chat.messages, mode]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || !chat.isReady || chat.isStreaming) return;
     const editor = getEditor();
     const md = editor ? htmlToMarkdown(editor) : "";
 
-    // Sync the live editor markdown into main so the next word_read
-    // tool call returns fresh content. Awaited so the AI never reads
-    // a stale snapshot when the user just edited and hit Send.
+    // Always keep main's doc cache fresh (PI tools; harmless for Grok).
     await pushWordDocToMain(md);
+    await pushWordModeToMain(mode);
 
-    // The AI uses word_read / word_edit tools to inspect and modify
-    // the document. In edit mode we attach a short hint so the model
-    // is nudged toward word_edit; the hint is delivered as context, not
-    // prepended to the user's visible message.
+    if (aiRoute === "grok-build") {
+      const hiddenContext = [
+        "You are assisting with a document inside Central Hub Docs Area.",
+        mode === "edit"
+          ? [
+              "Mode: EDIT.",
+              "The user has chat AND a separate document page.",
+              "When changing the document, put the FULL revised markdown ONLY between these markers (applied to the page; the app hides this block from chat):",
+              "<<<DOC",
+              "...full revised markdown...",
+              ">>>",
+              "You MAY also reply normally in chat outside the markers — explain what you changed, ask questions, give notes, discuss the work, etc.",
+              "Do not paste the full story/document body outside the markers.",
+              "If no document change is needed, just reply in chat with no markers.",
+            ].join("\n")
+          : "Mode: READ-ONLY. Answer questions about the document. Do not dump the full document unless the user asks.",
+        "--- Current document markdown ---",
+        md || "(empty document)",
+        "--- End document ---",
+      ].join("\n");
+      chat.sendMessage(text, undefined, hiddenContext);
+      setInput("");
+      return;
+    }
+
+    // PI path: word_read / word_edit tools + edit-mode instruction.
     const attachments =
       mode === "edit"
         ? [
             {
               type: "text" as const,
               title: "EditModeHint",
-              content:
-                'The user is in Edit mode. Use the word_edit tool to apply the requested changes to the document. If the document is empty, use word_edit with old_string="" and new_string set to the full starting content. Keep your chat reply brief; do not paste the document or revised passages into chat.',
+              content: [
+                "The user is in Edit mode.",
+                "Change the document with the word_edit tool (preferred). If the tool fails, put the full revised document between <<<DOC and >>> markers.",
+                'If the document is empty, call word_edit with old_string="" and new_string set to the full starting content.',
+                "You MAY reply normally in chat (explanations, questions, notes about what you changed).",
+                "Do NOT paste the full story or long document body into chat — the page is updated from the tool/markers automatically.",
+              ].join(" "),
             },
           ]
         : [];
     chat.sendMessage(text, attachments);
     setInput("");
-  }, [input, chat, getEditor, mode]);
+  }, [aiRoute, input, chat, getEditor, mode]);
 
   const handleKey = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -219,7 +373,7 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
           <button
             type="button"
             onClick={() => setMode("edit")}
-            title="Edit mode: AI applies changes via the word_edit tool, one targeted edit at a time."
+            title="Edit mode: AI changes are applied directly to the document page."
             className={`flex items-center gap-1 px-2 py-1 text-[9px] uppercase tracking-widest font-mono transition-colors border-l border-[var(--ch-border-subtle)] ${
               mode === "edit"
                 ? "bg-[var(--ch-accent-10)] text-[var(--ch-accent)]"
@@ -274,6 +428,21 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
 
       <div className="px-3 py-2 border-b border-[var(--ch-border-subtle)] shrink-0 flex items-center gap-2">
         <div className="relative flex-1 min-w-0">
+          {aiRoute === "grok-build" ? (
+            <div className="w-full flex items-center gap-1.5 border border-[var(--ch-border-subtle)] bg-[var(--ch-bg-inset)] px-2 py-1 rounded-sm text-left">
+              <Cpu className="w-3 h-3 text-[var(--ch-text-faint)] shrink-0" />
+              <span className="flex-1 truncate text-[10px] font-mono text-[var(--ch-text)]">
+                Grok 4.5
+              </span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  chat.isReady
+                    ? "bg-[var(--ch-success)]"
+                    : "bg-[var(--ch-text-faint)]"
+                }`}
+              />
+            </div>
+          ) : (
           <button
             type="button"
             onClick={() => setModelOpen((v) => !v)}
@@ -293,7 +462,8 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
             </span>
             <ChevronDown className="w-3 h-3 text-[var(--ch-text-faint)] shrink-0" />
           </button>
-          {modelOpen && (
+          )}
+          {aiRoute === "pi" && modelOpen && (
             <div
               className="fixed inset-0 z-30"
               onClick={() => {
@@ -303,7 +473,7 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
             />
           )}
           <AnimatedDropdown
-            open={modelOpen}
+            open={aiRoute === "pi" && modelOpen}
             className="clouds-coding-dropdown-panel absolute top-full left-0 right-0 mt-1 z-40 max-h-[280px] border border-[var(--ch-border)] bg-[var(--ch-bg-surface)] rounded-sm shadow-2xl flex flex-col overflow-hidden"
           >
             <input
@@ -366,13 +536,13 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
         ) : !chat.isReady ? (
           <div className="flex items-center gap-2 text-[10px] text-[var(--ch-text-faint)]">
             <Loader2 className="w-3 h-3 animate-spin" />
-            Connecting to PI…
+            Connecting to {aiRoute === "grok-build" ? "Grok" : "PI"}…
           </div>
         ) : chat.messages.length === 0 ? (
           <div className="text-[10px] text-[var(--ch-text-faint)] leading-relaxed">
             {mode === "read"
-              ? "Read mode: ask about the document. The AI reads it on demand via a tool call instead of receiving it with every message."
-              : "Edit mode: describe a change. The AI applies it via the word_edit tool, one targeted replacement at a time."}
+              ? "Read mode: ask about the document. The AI reads it on demand."
+              : "Edit mode: describe a change. The page updates from the edit; the AI can still talk in chat."}
           </div>
         ) : (
           chat.messages.map((m) => {
@@ -436,9 +606,31 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
                 </div>
               );
             }
-            // Assistant: skip empty bubbles (turns that only made tool calls
-            // and produced no chat text) so we don't show ghost frames.
-            if (!m.content && !m.thinking && !m.isStreaming) return null;
+            // Assistant: hide document payloads; keep normal chat replies.
+            const raw = m.content || "";
+            const extracted =
+              mode === "edit" && raw ? extractRevisedDocument(raw) : null;
+            const chatOnly =
+              mode === "edit" ? stripDocumentPayload(raw) : raw;
+            const alreadyApplied = lastAppliedMsgId === m.id;
+            const showAppliedChip =
+              mode === "edit" &&
+              !m.isStreaming &&
+              (alreadyApplied || Boolean(extracted));
+            // While the model is streaming only the doc block, show progress.
+            const showUpdating =
+              mode === "edit" &&
+              m.isStreaming &&
+              !chatOnly.trim() &&
+              Boolean(raw.trim());
+            const hasVisibleChat =
+              Boolean(chatOnly.trim()) ||
+              Boolean(m.thinking) ||
+              showUpdating ||
+              showAppliedChip ||
+              (m.isStreaming && !raw.trim());
+            if (!hasVisibleChat) return null;
+
             return (
               <div
                 key={m.id}
@@ -454,18 +646,35 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
                     </p>
                   </details>
                 )}
-                {m.isStreaming ? (
-                  <p className="text-[11px] leading-relaxed whitespace-pre-wrap break-words">
-                    {m.content || "\u200B"}
-                  </p>
-                ) : (
-                  <MarkdownContent
-                    content={m.content || ""}
-                    className="markdown-body"
-                  />
-                )}
-                {m.isStreaming && !m.content && (
+                {showUpdating ? (
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--ch-accent)] flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Updating document…
+                  </div>
+                ) : null}
+                {chatOnly.trim() ? (
+                  m.isStreaming ? (
+                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+                      {chatOnly}
+                    </p>
+                  ) : (
+                    <MarkdownContent
+                      content={chatOnly}
+                      className="markdown-body"
+                    />
+                  )
+                ) : m.isStreaming && !showUpdating ? (
                   <span className="inline-block w-1.5 h-3 ml-0.5 bg-[var(--ch-accent)] animate-pulse align-middle" />
+                ) : null}
+                {showAppliedChip && (
+                  <div
+                    className={`text-[10px] font-mono uppercase tracking-widest text-[var(--ch-accent)] flex items-center gap-2 ${
+                      chatOnly.trim() || showUpdating ? "mt-1.5" : ""
+                    }`}
+                  >
+                    <Check className="w-3 h-3" />
+                    Applied to document
+                  </div>
                 )}
               </div>
             );
@@ -489,7 +698,11 @@ export const AIPanel = forwardRef<AIPanelHandle, Props>(function AIPanel(
         />
         <div className="flex items-center gap-2 mt-2">
           <span className="text-[9px] uppercase tracking-widest font-mono text-[var(--ch-text-faint)]">
-            {mode === "read" ? "Reply in chat" : "Edits via word_edit"}
+            {mode === "read"
+              ? "Reply in chat"
+              : aiRoute === "grok-build"
+                ? "Edits apply to page"
+                : "Edits via tool / block"}
           </span>
           {chat.isStreaming ? (
             <button
